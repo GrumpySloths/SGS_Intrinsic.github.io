@@ -1,0 +1,43 @@
+dataset: 'LLFF'
+n_views: 3
+cuda_idx: 0
+stop_iterations: -1
+resume: False
+resume_root_dir: ''
+use_sd: False
+use_wsds: False
+use_wsds_2: False
+use_sds: True
+use_sdsi: False
+use_sds_ori: False
+use_lora: False
+use_lora_2: False
+use_pixel: False
+rand_ply: False
+origin: False
+reset_param: 0.01
+sh_interval: 500
+densify_grad_threshold: 0.0005
+depth_weight: 0.0
+depth_pseudo_weight: 0.0
+opacity_reset_interval: 10000
+lambda_dssim: 0.2
+sample_pseudo_interval: 1
+pixel_pseudo_weight: 1.0
+sd_pseudo_weight: 0.5
+warp_sds_pseudo_weight: 0.2
+warp_sds_pseudo_weight_2: 2.0
+sds_pseudo_weight: 2.0
+resolution: 8
+warp_sds_guidance_scale: 100 # we can change the "warp_sds_guidance_scale" term to change the guidance scale of vanilla SDS
+
+iterations: 10000
+sd_guidance_scale: 7.5
+num_inference_steps: 25
+lora_start_iter: 2000
+sd_guidance_start_iter: 2000
+warp_sds_guidance_start_iter: 2000
+pixel_guidance_start_iter: 2000
+start_sample_pseudo : 2000
+
+python_file: 'train_record_npy.py'

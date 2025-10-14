@@ -1,0 +1,41 @@
+dataset: 'DTU'
+n_views: 3
+cuda_idx: 0
+use_sd: False
+use_wsds: True
+use_wsds_2: True
+use_sds: False
+use_sdsi: False
+use_lora: False
+use_lora_2: False
+use_pixel: True
+rand_ply: False
+white_background: False
+
+reset_param: 0.05
+sh_interval: 500
+densify_grad_threshold: 0.0005
+
+depth_weight: 0.005
+depth_pseudo_weight: 0.05
+opacity_reset_interval: 1000
+lambda_dssim: 0.6
+sample_pseudo_interval: 1
+pixel_pseudo_weight: 0.2
+sd_pseudo_weight: 0.5
+warp_sds_pseudo_weight: 0.2
+warp_sds_pseudo_weight_2: 2.0
+sds_pseudo_weight: 1.0
+resolution: 4
+warp_sds_guidance_scale: 7.5
+
+iterations: 10000
+sd_guidance_scale: 7.5
+num_inference_steps: 25
+lora_start_iter: 2000
+sd_guidance_start_iter: 2000
+warp_sds_guidance_start_iter: 2000
+pixel_guidance_start_iter: 2000
+start_sample_pseudo : 2000
+
+python_file: 'train_dtu_mask.py'
