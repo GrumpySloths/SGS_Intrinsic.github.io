@@ -1,0 +1,318 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Debug script_for_blip.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/script_for_blip.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "2"
+            }
+        },
+        {
+            "name": "Python: Train with custom script",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/train.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "-s", "./datasets/nerf_LLFF_data/fern",
+                "-m", "output/nerf_llff_data/fern",
+                "--eval",
+                "--n_views", "3",
+                "--iterations", "10000",
+                "--depth_weight", "0.05",
+                "--depth_pseudo_weight", "0.5",
+                "--opacity_reset_interval", "10000",
+                "--start_sample_pseudo", "2000",
+                "--sample_pseudo_interval", "1",
+                "--images", "images_8",
+                "--lambda_dssim", "0.2",
+                "--reset_param", "0.01",
+                "--sh_interval", "500",
+                "--densify_grad_threshold", "0.0005",
+                "--my_debug",
+                "--guidance_scale", "7.5",
+                "--warp_sds_guidance_start_iter", "2000",
+                "--add_warp_sds_guidance",
+                "--warp_sds_pseudo_weight", "0.2",
+                "--add_warp_sds_guidance_2",
+                "--warp_sds_pseudo_weight_2", "2.0",
+                "--add_pixel_guidance",
+                "--pixel_guidance_start_iter", "2000",
+                "--pixel_pseudo_weight", "2.0"
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "1"
+            }
+        },
+        {
+            "name": "Python: Debug run_infer.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/jiahao/Relightable3DGaussian/reference_methods/IPSM/reference_methods/GeoWizard/geowizard/run_infer.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--input_dir", "/home/jiahao/Relightable3DGaussian/reference_methods/IPSM/reference_methods/GeoWizard/geowizard/input/example",
+                "--output_dir", "/home/jiahao/Relightable3DGaussian/reference_methods/IPSM/reference_methods/GeoWizard/geowizard/output",
+                "--ensemble_size", "3",
+                "--denoise_steps", "10",
+                "--seed", "0",
+                "--domain", "indoor",
+                "--pretrained_model_path", "/home/jiahao/Relightable3DGaussian/reference_methods/IPSM/pretrained_models/geowizard"
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0"
+            }
+        },
+        {
+            "name": "Python: Train mipnerf360 room",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/train.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+            "-s", "./datasets/mipnerf360/room",
+            "-m", "output/mipnerf360/room_pbr_sds_basic",
+            "--eval",
+            "--n_views", "24",
+            "--iterations", "15000",
+            "--end_sample_pseudo", "15000",
+            "--pbr_iteration", "10000",
+            "--metallic",
+            "--depth_weight", "0.05",
+            "--depth_pseudo_weight", "0.5",
+            "--opacity_reset_interval", "10000",
+            "--start_sample_pseudo", "2000",
+            "--sample_pseudo_interval", "3",
+            "--images", "images_8",
+            "--lambda_dssim", "0.2",
+            "--lambda_normal_render_depth", "0.01",
+            "--reset_param", "0.01",
+            "--sh_interval", "500",
+            "--densify_grad_threshold", "0.0005",
+            "--my_debug",
+            "--guidance_scale", "7.5",
+            "--warp_sds_guidance_start_iter", "2000",
+            "--add_warp_sds_guidance",
+            "--warp_sds_pseudo_weight", "0.2",
+            "--add_warp_sds_guidance_2",
+            "--warp_sds_pseudo_weight_2", "2.0",
+            "--add_pixel_guidance",
+            "--pixel_guidance_start_iter", "2000",
+            "--pixel_pseudo_weight", "2.0"
+            ],
+            "env": {
+            "CUDA_VISIBLE_DEVICES": "5"
+            }
+        },
+        {
+            "name": "Python: Debug Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${fileDirname}"
+        },
+        {
+            "name": "Python: Train train_modify.py mipnerf360 room",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/train_modify.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+            "-s", "./datasets/mipnerf360/room",
+            "-m", "output/mipnerf360/trainModify_room_all_v1",
+            "--eval",
+            "--n_views", "24",
+            "--iterations", "15000",
+            "--end_sample_pseudo", "15000",
+            "--pbr_iteration", "10000",
+            "--metallic",
+            "--depth_weight", "0.05",
+            "--depth_pseudo_weight", "0.5",
+            "--opacity_reset_interval", "10000",
+            "--start_sample_pseudo", "2000",
+            "--sample_pseudo_interval", "3",
+            "--images", "images_4",
+            "--lambda_dssim", "0.2",
+            "--lambda_normal_render_depth", "0.01",
+            "--reset_param", "0.01",
+            "--sh_interval", "500",
+            "--densify_grad_threshold", "0.0005",
+            // "--my_debug"
+            ],
+            "env": {
+            "CUDA_VISIBLE_DEVICES": "3"
+            }
+        },
+        {
+            "name": "Python: Train RGBX interiorverse scene_0",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/train_modify_rgbx.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+            "-s", "./datasets/interiorverse/scene_0",
+            "-m", "output/interiorverse/scene_0_nviews_12_v2_debug",
+            "--eval",
+            "--n_views", "12",
+            "--iterations", "20000",
+            "--end_sample_pseudo", "20000",
+            "--pbr_iteration", "10000",
+            "--depth_weight", "0.05",
+            "--depth_pseudo_weight", "0.5",
+            "--opacity_reset_interval", "10000",
+            "--start_sample_pseudo", "2000",
+            "--sample_pseudo_interval", "3",
+            "--lambda_dssim", "0.2",
+            "--lambda_normal_render_depth", "0.01",
+            "--reset_param", "0.01",
+            "--sh_interval", "500",
+            "--densify_grad_threshold", "0.0005"
+            ],
+            "env": {
+            "CUDA_VISIBLE_DEVICES": "2"
+            },
+            "python": "/home/jiahao/anaconda3/envs/dragGaussian/bin/python"
+        },
+        {
+            "name": "Python: Train train.py interiorverse scene_0 nviews_12",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/train.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--eval",
+                "-s", "./datasets/interiorverse/scene_0_bp/",
+                "-m", "./outputs/interiorverse/scene_0_bp_3dgs_nv12_v7",
+                "--lambda_normal_render_depth", "0.01",
+                "--lambda_normal_smooth", "0.01",
+                "--lambda_depth_smooth", "0.01",
+                "--lambda_mask_entropy", "0.1",
+                "--densification_interval", "100",
+                "--save_training_vis",
+                "--densify_grad_normal_threshold", "1e-8",
+                "--lambda_depth_var", "2e-2",
+                "--n_views", "12"
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "3",
+                "PYDEVD_WARN_SLOW_RESOLVE_TIMEOUT": "1"
+            },
+            "python": "/home/jiahao/anaconda3/envs/dragGaussian/bin/python"
+        },
+        {
+            "name": "Python: Train NeILF model using 3DGS checkpoint (scene_0_bp, n_views=12, v5)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/train.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+            "--eval",
+            "-s", "./datasets/interiorverse/scene_0_bp/",
+            "-m", "./outputs/interiorverse/scene_0_bp_neilf_nv12_modify_v5",
+            "-c", "./outputs/interiorverse/scene_0_bp_3dgs_nv12_v5/chkpnt7000.pth",
+            "--save_training_vis",
+            "--position_lr_init", "0",
+            "--position_lr_final", "0",
+            "--normal_lr", "0",
+            "--sh_lr", "0",
+            "--opacity_lr", "0",
+            "--scaling_lr", "0",
+            "--rotation_lr", "0",
+            "--iterations", "12000",
+            "--env_resolution", "128",
+            "--lambda_base_color_smooth", "1",
+            "--lambda_roughness_smooth", "0.2",
+            "--lambda_geo_diffuse", "0.25",
+            "--lambda_light_smooth", "1",
+            "--lambda_light", "0.01",
+            "-t", "gsid",
+            "--sample_num", "24",
+            "--save_training_vis_iteration", "200",
+            "--lambda_env_smooth", "0.01",
+            "--n_views", "12"
+            ],
+            "env": {
+            "CUDA_VISIBLE_DEVICES": "4"
+            },
+            "python": "/home/jiahao/anaconda3/envs/dragGaussian/bin/python"
+        },
+        {
+            "name": "Python: Train NeILF gsid scene_11 nviews_12 v2 vis_enc_self",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/train.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+            "--eval",
+            "-s", "./datasets/interiorverse_vggt/scene_11/",
+            "-m", "./outputs/interiorverse_vggt/scene_11_neilf_nv12_gsid_v2_vis_enc_self",
+            "-c", "./outputs/interiorverse_vggt/scene_11_3dgs_nv12_v0/chkpnt7000.pth",
+            "--save_training_vis",
+            "--position_lr_init", "0",
+            "--position_lr_final", "0",
+            "--normal_lr", "0",
+            "--sh_lr", "0",
+            "--opacity_lr", "0",
+            "--scaling_lr", "0",
+            "--rotation_lr", "0",
+            "--pointlight_lr", "0.05",
+            "--gsid_env_lr", "0.01",
+            "--iterations", "10000",
+            "--env_resolution", "128",
+            "--lambda_base_color_smooth", "1",
+            "--lambda_roughness_smooth", "0.2",
+            "--lambda_geo_diffuse", "0.25",
+            "--lambda_light_smooth", "1",
+            "--lambda_light", "0.01",
+            "--lambda_pbr", "1.0",
+            "--lambda_env_smooth", "0.01",
+            "-t", "gsid",
+            "--sample_num", "24",
+            "--save_training_vis_iteration", "200",
+            "--n_views", "12"
+            ],
+            "env": {
+            "CUDA_VISIBLE_DEVICES": "3",
+            "http_proxy": "http://127.0.0.1:7890",
+            "https_proxy": "http://127.0.0.1:7890"
+            },
+            "python": "/home/jiahao/anaconda3/envs/dragGaussian/bin/python"
+        },
+        {
+            "name": "Python: Eval NeILF scene_11 nviews_12 (gsid)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/eval_nvs.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+            "--eval",
+            "-m", "./outputs/interiorverse_vggt/scene_11_neilf_nv12_gsid_v0_morelight",
+            "-c", "./outputs/interiorverse_vggt/scene_11_neilf_nv12_gsid_v0_morelight/chkpnt10000.pth",
+            "-t", "gsid",
+            "--n_views", "12"
+            ],
+            "env": {
+            "CUDA_VISIBLE_DEVICES": "6",
+            "http_proxy": "http://127.0.0.1:7890",
+            "https_proxy": "http://127.0.0.1:7890"
+            },
+            "python": "/home/jiahao/anaconda3/envs/dragGaussian/bin/python"
+        },
+    ]
+}
