@@ -139,9 +139,9 @@ class OptimizationParams(ParamGroup):
         self.reset_param = 0.05
         self.sh_interval = 500
 
-        self.num_images=0  #rgbx settings,用于记录train_views以及pseudo_views的总的数量
-        self.num_gt_images=0  #rgbx settings,用于记录ground truth的总的数量
-        self.num_pseudo_images=0  #rgbx settings,用于记录pseudo_views的总的数量
+        self.num_images=0  # RGBX settings: total number of train and pseudo views.
+        self.num_gt_images=0  # RGBX settings: total number of ground-truth views.
+        self.num_pseudo_images=0  # RGBX settings: total number of pseudo views.
 
         super().__init__(parser, "Optimization Parameters")
 

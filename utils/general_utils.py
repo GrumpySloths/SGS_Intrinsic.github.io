@@ -217,7 +217,7 @@ def save_tensor_as_image(tensor, filename):
     image = transform(tensor)
     image.save(filename)
 
-#这里的metrics是一个字典，包含了psnr, ssim, lpips等指标
+# metrics is a dictionary containing PSNR, SSIM, LPIPS, and other metrics.
 def record_training(args, init=True, iter_num=None, psnr_num=None, ssim_num=None, lpips_num=None):
     csv_path = os.path.join(args.model_path, 'record.csv')
     if(init):
@@ -243,8 +243,8 @@ def record_training_metrics(args, init=True, iter_num=None, metrics=None):
             writer.writerow(headers)
     else:
         assert metrics is not None and iter_num is not None
-        #metrics的key所对应的value在当前实现中默认为tensor类型,故要使用.item()方法将其转换为标量
-        #遍历metrics字典的键,如果其对应的value为tensor类型,则使用.item()方法将其转换为标量
+        # In the current implementation, metric values default to tensors, so convert them to scalars with .item().
+        # Iterate over the metric keys and convert tensor values to scalars with .item().
         for k in metrics.keys():
             if isinstance(metrics[k], torch.Tensor):
                 metrics[k] = metrics[k].item()

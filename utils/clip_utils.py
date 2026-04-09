@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import clip
 from PIL import Image
-# from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
 from torchvision import transforms
 
 
@@ -29,15 +28,6 @@ class CLIPEditor(object):
                 ])(image)
                 images.append(_image)
             image = torch.cat(images, dim=0)
-            """
-            print(image.shape)
-            for img in images:
-                import numpy as np
-                import time
-                import imageio
-                rgb_pred = (img.detach().permute(0, 2, 3, 1)[0].cpu().numpy()*255).astype(np.uint8)  # (h,w,c)
-                imageio.imsave('./aug_tmpdebug_____{}.png'.format(time.time()), rgb_pred)
-            """
         else:
             image = transforms.Resize(self.model.visual.input_resolution, interpolation=Image.BICUBIC)(image)
         image = transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))(image)

@@ -2,14 +2,13 @@ import numpy as np
 import torch
 from torch import nn
 from einops import einsum, rearrange
-from arguments.config_r3dg import OptimizationParams
+from arguments.config import OptimizationParams
 
 # ====================== INTENSITY ======================
 
+
 class Constant(nn.Module):
-    def __init__(self,
-                 value,
-                 exp_val=True):
+    def __init__(self, value, exp_val=True):
         super().__init__()
         self.value = nn.Parameter(torch.tensor(value, dtype=torch.float32))
         self.exp_val = exp_val
@@ -27,19 +26,14 @@ class Constant(nn.Module):
         return torch.sum(val)
 
 
-# 这里实际上是用一个全局的SG来表示环境光照
+# This effectively uses a global SG to represent the environmental lighting.
 class MultipleSphericalGaussians(nn.Module):
-    def __init__(self,
-                 sg_col=6,
-                 sg_row=2,
-                 ch=3,
-                 single_color=False,
-                 w_lamb_reg=0):
+    def __init__(self, sg_col=6, sg_row=2, ch=3, single_color=False, w_lamb_reg=0):
         super().__init__()
 
         self.sg_col = sg_col
         self.sg_row = sg_row
-        self.SGNum = self.sg_col * self.sg_row  #12
+        self.SGNum = self.sg_col * self.sg_row  # 12
 
         self.single_color = single_color
         self.COLORNum = self.SGNum
@@ -53,16 +47,17 @@ class MultipleSphericalGaussians(nn.Module):
         self.weight, self.theta, self.phi, self.lamb = self.init_sg_grid()
 
         is_enabled = torch.tensor(True)
-        self.register_buffer('is_enabled', is_enabled)
+        self.register_buffer("is_enabled", is_enabled)
 
     def training_setup(self):
+        self.optimizer = torch.optim.Adam(
+            self.parameters(), lr=5e-2, eps=1e-15, weight_decay=False
+        )
 
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=5e-2, eps=1e-15,weight_decay=False)
-    
     def step(self):
         self.optimizer.step()
         self.optimizer.zero_grad()
-    
+
     def capture(self):
         captured_list = [
             self.parameters(),
@@ -70,7 +65,7 @@ class MultipleSphericalGaussians(nn.Module):
         ]
 
         return captured_list
-    
+
     def create_from_ckpt(self, checkpoint_path, restore_optimizer=False):
         model_state, opt_state, first_iter = torch.load(checkpoint_path)
         self.model.load_state_dict(model_state)
@@ -80,7 +75,7 @@ class MultipleSphericalGaussians(nn.Module):
             except Exception as e:
                 print("Not loading optimizer state_dict!", e)
         return first_iter
-    
+
     def set_requires_grad(self, requires_grad: bool = False):
         """
         Freeze or unfreeze all parameters in this module.
@@ -90,7 +85,7 @@ class MultipleSphericalGaussians(nn.Module):
         """
         for param in self.parameters():
             param.requires_grad = requires_grad
-        
+
     def init_sg_grid(self):
         phiCenter = ((np.arange(self.sg_col) + 0.5) / self.sg_col - 0.5) * np.pi * 2
         thetaCenter = (np.arange(self.sg_row) + 0.5) / self.sg_row * np.pi / 2.0
@@ -106,12 +101,14 @@ class MultipleSphericalGaussians(nn.Module):
         thetaRange = (np.pi / 2 / self.sg_row) * 1.5
         phiRange = (2 * np.pi / self.sg_col) * 1.5
 
-        self.register_buffer('thetaCenter', thetaCenter)
-        self.register_buffer('phiCenter', phiCenter)
-        self.register_buffer('thetaRange', torch.tensor(thetaRange))
-        self.register_buffer('phiRange', torch.tensor(phiRange))
+        self.register_buffer("thetaCenter", thetaCenter)
+        self.register_buffer("phiCenter", phiCenter)
+        self.register_buffer("thetaRange", torch.tensor(thetaRange))
+        self.register_buffer("phiRange", torch.tensor(phiRange))
 
-        weight = nn.Parameter(torch.ones((self.COLORNum, self.ch), dtype=torch.float32) * (0))
+        weight = nn.Parameter(
+            torch.ones((self.COLORNum, self.ch), dtype=torch.float32) * (0)
+        )
         theta = nn.Parameter(torch.zeros((self.SGNum, 1), dtype=torch.float32))
         phi = nn.Parameter(torch.zeros((self.SGNum, 1), dtype=torch.float32))
         lamb = nn.Parameter(torch.log(torch.ones(self.SGNum, 1) * np.pi / self.sg_row))
@@ -162,18 +159,20 @@ class MultipleSphericalGaussians(nn.Module):
     #     else:
     #         return torch.zeros_like(direction)
 
-    def forward(self, direction, iteration=None, noise_std=30, noise_decay_iteration=10000):
+    def forward(
+        self, direction, iteration=None, noise_std=30, noise_decay_iteration=10000
+    ):
         if self.is_enabled:
             weight, theta, phi, lamb = self.deparameterize()
             axis = self.get_axis(theta, phi)
-            cos_angle = einsum(direction, axis, 'b c, sg c -> b sg')
-            cos_angle = rearrange(cos_angle, 'b sg -> b sg 1')
-            lamb = rearrange(lamb, 'sg 1 -> 1 sg 1')
-            weight = rearrange(weight, 'sg c -> 1 sg c')
+            cos_angle = einsum(direction, axis, "b c, sg c -> b sg")
+            cos_angle = rearrange(cos_angle, "b sg -> b sg 1")
+            lamb = rearrange(lamb, "sg 1 -> 1 sg 1")
+            weight = rearrange(weight, "sg c -> 1 sg c")
             sg_val = weight * torch.exp(lamb * (cos_angle - 1))
-            sg_val = torch.sum(sg_val, dim=1) #[76800,3]
+            sg_val = torch.sum(sg_val, dim=1)  # [76800,3]
 
-            # 训练初期加噪声扰动
+            # Add noise perturbation during early training.
             if (iteration is not None) and (iteration < noise_decay_iteration):
                 std = noise_std * (1 - iteration / noise_decay_iteration)
                 noise = torch.randn_like(sg_val) * std
@@ -196,65 +195,75 @@ class MultipleSphericalGaussians(nn.Module):
             return val
         else:
             return torch.tensor(0, device=self.weight.device, dtype=torch.float32)
-    
+
     @property
     def spp(self):
         return 1
 
     def sample_direction(self, vpos, normal):
-        '''
-            Sample directions from the light positions to the view positions.
-            vpos:(3,h,w)
-            normal:(3,h,w)
-            return:(1,3,h,w)
-        '''
+        """
+        Sample directions from the light positions to the view positions.
+        vpos:(3,h,w)
+        normal:(3,h,w)
+        return:(1,3,h,w)
+        """
         # (1, 3, h, w)
         return normal.unsqueeze(0)
 
     def pdf_direction(self, vpos, direction):
         # (1, 1, h, w)
         # return torch.ones_like(vpos[:, :, :1, ...])
-        return torch.ones_like(vpos[None,:1,:,:])
+        return torch.ones_like(vpos[None, :1, :, :])
 
 
 # ====================== EMISSIVE LIGHTING ======================
 
 
 class FusedSGGridPointLighting(nn.Module):
-    def __init__(self,
-                 num_lights=[3,3,3],  #[6,6,6]
-                 bound=1.5,
-                 sg_col=6,
-                 sg_row=2,
-                 ch=3,
-                 single_color=False):
+    def __init__(
+        self,
+        num_lights=[3, 3, 3],  # [6,6,6]
+        bound=1.5,
+        sg_col=6,
+        sg_row=2,
+        ch=3,
+        single_color=False,
+    ):
         super().__init__()
 
-        self.num_lights = num_lights #[6,6,6]
-
-        self.position = nn.Parameter(self.generate_grid_3d(np.array(num_lights), bound)) #这里的position也是可优化参数，表示光源的位置
+        self.num_lights = num_lights  # [6,6,6]
+        # [num_lights,3]
+        self.position = nn.Parameter(
+            self.generate_grid_3d(np.array(num_lights), bound)
+        )  # This position is also an optimizable parameter and represents the light positions.
+        print("self.position shape:", self.position.shape)
 
         # Value init
         self.sg_col = sg_col
         self.sg_row = sg_row
-        self.SGNum = self.sg_col * self.sg_row  #12
+        self.SGNum = self.sg_col * self.sg_row  # 12
 
-        self.single_color = single_color #false
+        self.single_color = single_color  # false
         self.COLORNum = self.SGNum
 
         self.ch = ch
 
         self.nearest_dist_sqr = None
-        #一个疑问就是这里的weight,theta,phi,lamb实际代指什么呢?这里实际代指的是每个点光源的SG参数，一个点光源通过多个SG来表示
+        # The question here is what weight, theta, phi, and lamb actually represent.
+        # They are the SG parameters of each point light, and one point light is represented by multiple SGs.
         self.weight, self.theta, self.phi, self.lamb = self.init_sg_grid()
 
         is_enabled = torch.ones(self.spp, dtype=torch.bool)
-        self.register_buffer('is_enabled', is_enabled)
+        self.register_buffer("is_enabled", is_enabled)
 
-    def training_setup(self,training_args: OptimizationParams):
+    def training_setup(self, training_args: OptimizationParams):
+        self.optimizer = torch.optim.Adam(
+            self.parameters(),
+            lr=training_args.pointlight_lr,
+            eps=1e-15,
+            weight_decay=False,
+        )
 
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=training_args.pointlight_lr, eps=1e-15,weight_decay=False)
-    
     def step(self, max_norm=1.0):
         # torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm)
         # for group in self.optimizer.param_groups:
@@ -263,7 +272,7 @@ class FusedSGGridPointLighting(nn.Module):
         #             raise RuntimeError("NaN detected in optimizer gradients")
         self.optimizer.step()
         self.optimizer.zero_grad()
-    
+
     def capture(self):
         captured_list = [
             self.parameters(),
@@ -284,25 +293,27 @@ class FusedSGGridPointLighting(nn.Module):
 
     def save_ckpt(self, checkpoint_path, current_iter=None):
         """
-        保存模型和优化器的状态到 checkpoint_path。
+        Save the model and optimizer state to checkpoint_path.
 
         Args:
-            checkpoint_path (str): 保存文件路径
-            current_iter (int, optional): 当前训练轮次或步数
+            checkpoint_path (str): Path to the checkpoint file.
+            current_iter (int, optional): Current training iteration or step.
         """
         model_state = self.state_dict()
-        opt_state = self.optimizer.state_dict() if hasattr(self, 'optimizer') else None
-        # 保存当前轮次，便于恢复训练
+        opt_state = self.optimizer.state_dict() if hasattr(self, "optimizer") else None
+        # Save the current iteration for later training resumption.
         ckpt = (model_state, opt_state, current_iter)
         torch.save(ckpt, checkpoint_path)
-    
+
     def init_sg_grid(self):
         phiCenter = ((np.arange(self.sg_col) + 0.5) / self.sg_col - 0.5) * np.pi * 2
         thetaCenter = (np.arange(self.sg_row) + 0.5) / self.sg_row * np.pi / 2.0
 
         phiCenter, thetaCenter = np.meshgrid(phiCenter, thetaCenter)
 
-        thetaCenter = thetaCenter.reshape(1, self.SGNum, 1).astype(np.float32) #[1,12,1]
+        thetaCenter = thetaCenter.reshape(1, self.SGNum, 1).astype(
+            np.float32
+        )  # [1,12,1]
         thetaCenter = torch.from_numpy(thetaCenter).expand([1, self.SGNum, 1])
 
         phiCenter = phiCenter.reshape(1, self.SGNum, 1).astype(np.float32)
@@ -311,15 +322,25 @@ class FusedSGGridPointLighting(nn.Module):
         thetaRange = (np.pi / 2 / self.sg_row) * 1.5
         phiRange = (2 * np.pi / self.sg_col) * 1.5
 
-        self.register_buffer('thetaCenter', thetaCenter)  #这里注册到buffer的变量会随着整个模型一起保存，迁移和加载
-        self.register_buffer('phiCenter', phiCenter)
-        self.register_buffer('thetaRange', torch.tensor(thetaRange))
-        self.register_buffer('phiRange', torch.tensor(phiRange))
-        #这里的参数空间设置和对齐挺有意思的，值得参考和借鉴
-        weight = nn.Parameter(torch.ones((self.spp, self.COLORNum, self.ch), dtype=torch.float32) * (-4)) #[216,12,3]
-        theta = nn.Parameter(torch.zeros((self.spp, self.SGNum, 1), dtype=torch.float32)) #[216,12,1]
-        phi = nn.Parameter(torch.zeros((self.spp, self.SGNum, 1), dtype=torch.float32)) #[216,12,1]
-        lamb = nn.Parameter(torch.log(torch.ones(self.spp, self.SGNum, 1) * np.pi / self.sg_row)) #[216,12,1]
+        self.register_buffer(
+            "thetaCenter", thetaCenter
+        )  # This buffer will be saved, moved, and loaded together with the model.
+        self.register_buffer("phiCenter", phiCenter)
+        self.register_buffer("thetaRange", torch.tensor(thetaRange))
+        self.register_buffer("phiRange", torch.tensor(phiRange))
+        # The parameter-space setup and alignment here are interesting and worth referencing.
+        weight = nn.Parameter(
+            torch.ones((self.spp, self.COLORNum, self.ch), dtype=torch.float32) * (-4)
+        )  # [216,12,3]
+        theta = nn.Parameter(
+            torch.zeros((self.spp, self.SGNum, 1), dtype=torch.float32)
+        )  # [216,12,1]
+        phi = nn.Parameter(
+            torch.zeros((self.spp, self.SGNum, 1), dtype=torch.float32)
+        )  # [216,12,1]
+        lamb = nn.Parameter(
+            torch.log(torch.ones(self.spp, self.SGNum, 1) * np.pi / self.sg_row)
+        )  # [216,12,1]
 
         return weight, theta, phi, lamb
 
@@ -337,9 +358,9 @@ class FusedSGGridPointLighting(nn.Module):
         x = np.linspace(-bound, bound, num_lights[0], dtype=np.float32)
         y = np.linspace(-bound, bound, num_lights[1], dtype=np.float32)
         z = np.linspace(-bound, bound, num_lights[2], dtype=np.float32)
-        grid = np.stack(np.meshgrid(x, y, z, indexing='ij'), axis=-1).reshape(-1, 3)
+        grid = np.stack(np.meshgrid(x, y, z, indexing="ij"), axis=-1).reshape(-1, 3)
         return torch.from_numpy(grid)
-    
+
     @property
     def spp(self):
         if isinstance(self.num_lights, int):
@@ -350,16 +371,22 @@ class FusedSGGridPointLighting(nn.Module):
             raise NotImplementedError()
 
     def sample_direction(self, vpos, normal):
-        '''
-            Sample directions from the light positions to the view positions.
-            vpos:(3,h,w)
-            normal:(3,h,w)
-            return:(spp,3,h,w)
-        '''
-        # (spp, 3, h, w),表示由每个pixel所对应的空间点指向光源的方向,position:(spp,3)
+        """
+        Sample directions from the light positions to the view positions.
+        vpos:(3,h,w)
+        normal:(3,h,w)
+        return:(spp,3,h,w)
+        """
+        # (spp, 3, h, w) indicates the direction from each pixel's 3D point toward the light source; position has shape (spp, 3).
         if torch.isnan(self.position).any():
+            # with torch.no_grad():
+            #     # Replace NaNs in the parameter tensor with zeros
+            #     if torch.isnan(self.position).any():
+            #         self.position.data.copy_(torch.nan_to_num(self.position.data, nan=0.0))
             raise RuntimeError("NaN detected in tensor position")
-        return torch.nn.functional.normalize(self.position[:,:, None, None] - vpos[None], dim=1)
+        return torch.nn.functional.normalize(
+            self.position[:, :, None, None] - vpos[None], dim=1
+        )
         # return torch.nn.functional.normalize(self.position[None, :, :, None, None] - vpos, dim=2)
 
     def pdf_direction(self, vpos, direction):
@@ -368,7 +395,9 @@ class FusedSGGridPointLighting(nn.Module):
         # Output: (nlights, 1, h, w)
         vpos_exp = vpos.unsqueeze(0)  # (1, 3, h, w)
         pos_exp = self.position.unsqueeze(-1).unsqueeze(-1)  # (nlights, 3, 1, 1)
-        dist_sqr = torch.sum((pos_exp - vpos_exp) ** 2, dim=1, keepdim=True)  # (nlights, 1, h, w)
+        dist_sqr = torch.sum(
+            (pos_exp - vpos_exp) ** 2, dim=1, keepdim=True
+        )  # (nlights, 1, h, w)
         # Record nearest distance squared for each light
         self.nearest_dist_sqr = dist_sqr.view(self.spp, -1).min(dim=1).values
 
@@ -402,84 +431,187 @@ class FusedSGGridPointLighting(nn.Module):
 
     def forward(self, direction):
         weight, theta, phi, lamb = self.deparameterize()
-        #这里的get_axis本质上是将球面坐标转换为直角坐标
-        axis = self.get_axis(theta, phi) #[48,12,3]
-        #direction.shape:[48,76800,3],这里每个pixel到每个光源都要计算一次距离
-        cos_angle = einsum(direction, axis, 'l b c, l sg c -> l b sg')
-        cos_angle = rearrange(cos_angle, 'l b sg -> l b sg 1')
-        lamb = rearrange(lamb, 'l sg 1 -> l 1 sg 1')
-        weight = rearrange(weight, 'l sg c -> l 1 sg c')
-        sg_val = weight * torch.exp(lamb * (cos_angle - 1)) #[48,76800,12,3]
-        sg_val = torch.sum(sg_val, dim=2) #[48,76800,3]
+        # get_axis essentially converts spherical coordinates to Cartesian coordinates.
+        axis = self.get_axis(theta, phi)  # [48,12,3]
+        # direction.shape:[48,76800,3]; each pixel must be matched against every light source once.
+        cos_angle = einsum(direction, axis, "l b c, l sg c -> l b sg")
+        cos_angle = rearrange(cos_angle, "l b sg -> l b sg 1")
+        lamb = rearrange(lamb, "l sg 1 -> l 1 sg 1")
+        weight = rearrange(weight, "l sg c -> l 1 sg c")
+        sg_val = weight * torch.exp(lamb * (cos_angle - 1))  # [48,76800,12,3]
+        sg_val = torch.sum(sg_val, dim=2)  # [48,76800,3]
 
         # Mask disabled lights
-        sg_val = rearrange(self.is_enabled, 'l -> l 1 1') * sg_val
+        sg_val = rearrange(self.is_enabled, "l -> l 1 1") * sg_val
 
         # # Sum over the lights
         # sg_val = torch.sum(sg_val, dim=0)
         return sg_val
 
-    def light_random_sample(self, direction, disable_prob=0.5, device=None, intensity_jitter=0.3, color_jitter=0.2):
+    def light_random_sample(
+        self,
+        direction,
+        disable_prob=0.3,
+        device=None,
+        intensity_jitter=0.3,
+        color_jitter=0.2,
+        position_jitter=0.25,
+        vpos=None,
+    ):
         """
         Forward pass with a random mask to disable some point lights,
-        and randomly perturb lighting intensity and color.
+        randomly perturb lighting intensity and color, and optionally
+        apply a temporary random perturbation to light positions.
 
         Args:
-            direction: (l, b, c) input directions.
+            direction: (l, b, 3) input directions OR (l, 3, h, w) if vpos provided.
             disable_prob: probability to disable each light (float in [0,1]).
             device: torch device for mask tensor (optional).
             intensity_jitter: max relative change for intensity (float, e.g. 0.3 for ±30%).
             color_jitter: max absolute change for color channels (float, e.g. 0.2 for ±0.2).
+            position_jitter: max position jitter (float). If vpos is provided, positions
+                             are jittered by a uniform offset in [-position_jitter, position_jitter]
+                             and directions / pdf are recomputed. If vpos is None and
+                             position_jitter>0, applies small additive noise to directions as an approximation.
+            vpos: (3, h, w) or (3, b) view positions (optional). If provided and position_jitter>0,
+                  perturbed positions will be used to recompute directions and pdf.
 
         Returns:
-            sg_val: (l, b, c) output values with randomly masked and jittered lights.
-            mask: (l,) the random boolean mask used.
+            sg_val: (l, b, 3) output values with randomly masked and jittered lights.
+            mask: (l,) boolean mask used (True = enabled).
+            pdf: distance-squared pdf-like output (l, 1, h, w) or (l, 1, b) when vpos provided and positions perturbed;
+                 None otherwise.
+            pert_direction: the perturbed directions used for evaluation. If vpos provided and has spatial shape,
+                            this will be (l, 3, h, w) or (l, 3, b) depending on vpos; otherwise returns the
+                            (l, b, 3) directions used (possibly noise-perturbed).
+            pert_positions: (l, 3) perturbed light positions if vpos provided and position_jitter>0, else None.
         """
-        weight, theta, phi, lamb = self.deparameterize()
-        axis = self.get_axis(theta, phi)  # [l, sg, 3]
-        cos_angle = einsum(direction, axis, 'l b c, l sg c -> l b sg')
-        cos_angle = rearrange(cos_angle, 'l b sg -> l b sg 1')
-        lamb = rearrange(lamb, 'l sg 1 -> l 1 sg 1')
-        weight = rearrange(weight, 'l sg c -> l 1 sg c')
-        sg_val = weight * torch.exp(lamb * (cos_angle - 1))  # [l, b, sg, c]
-        sg_val = torch.sum(sg_val, dim=2)  # [l, b, c]
-
-        l = direction.shape[0]
         if device is None:
             device = direction.device
 
-        # Generate random mask for lights
-        mask = (torch.rand(l, device=device) > disable_prob).to(dtype=sg_val.dtype)
-        mask = rearrange(mask, 'l -> l 1 1')
+        pert_positions = None
+        pdf = None
+        pert_direction_spatial = None
 
-        # Generate random intensity jitter per light
-        intensity_scale = 1.0 + (torch.rand(l, device=device) * 2 - 1) * intensity_jitter  # [l]
-        intensity_scale = rearrange(intensity_scale, 'l -> l 1 1')
+        # If vpos is provided, recompute directions from perturbed positions
+        if (
+            (vpos is not None)
+            and (position_jitter is not None)
+            and (position_jitter > 0)
+        ):
+            # self.position: (l,3)
+            l = self.spp
+            pos = self.position.to(device)
+            # uniform jitter per light
+            jitter = (torch.rand_like(pos, device=device) * 2.0 - 1.0) * float(
+                position_jitter
+            )
+            pert_positions = pos + jitter  # (l,3)
+            # compute new directions: (l,3,h,w) or (l,3,b)
+            vpos = vpos.to(device)
+            if vpos.dim() == 3:
+                # vpos: (3,h,w)
+                new_dir = torch.nn.functional.normalize(
+                    pert_positions.unsqueeze(-1).unsqueeze(-1) - vpos.unsqueeze(0),
+                    dim=1,
+                )  # (l,3,h,w)
+                # prepare flattened directions for SG eval: (l, b, 3)
+                _, _, h, w = new_dir.shape
+                direction_flat = rearrange(new_dir, "l c h w -> l (h w) c")
+                pert_direction_spatial = new_dir  # keep spatial form for return
+                # compute pdf (distance squared) in spatial form (l,1,h,w)
+                pos_exp = pert_positions.unsqueeze(-1).unsqueeze(-1)  # (l,3,1,1)
+                vpos_exp = vpos.unsqueeze(0)  # (1,3,h,w)
+                dist_sqr = torch.sum(
+                    (pos_exp - vpos_exp) ** 2, dim=1, keepdim=True
+                )  # (l,1,h,w)
+                pdf = dist_sqr
+            else:
+                # vpos: (3, b)
+                new_dir = torch.nn.functional.normalize(
+                    pert_positions.unsqueeze(-1) - vpos.unsqueeze(0), dim=1
+                )  # (l,3,b)
+                direction_flat = rearrange(new_dir, "l c b -> l b c")
+                pert_direction_spatial = new_dir
+                pos_exp = pert_positions.unsqueeze(-1)  # (l,3,1)
+                vpos_exp = vpos.unsqueeze(0)  # (1,3,b)
+                dist_sqr = torch.sum(
+                    (pos_exp - vpos_exp) ** 2, dim=1, keepdim=True
+                )  # (l,1,b)
+                pdf = dist_sqr
 
-        # Generate random color jitter per light (per channel)
-        color_scale = 1.0 + (torch.rand(l, 1, sg_val.shape[2], device=device) * 2 - 1) * color_jitter  # [l,1,c]
-        # Broadcast to [l, b, c]
-        color_scale = color_scale.expand(-1, sg_val.shape[1], -1)
+            # update nearest dist record
+            try:
+                self.nearest_dist_sqr = pdf.view(self.spp, -1).min(dim=1).values
+            except Exception:
+                # safe fallback
+                self.nearest_dist_sqr = None
 
-        sg_val = sg_val * intensity_scale * color_scale
+            # use flattened directions for SG computation
+            direction = direction_flat
+        elif (position_jitter is not None) and (position_jitter > 0):
+            # No vpos: approximate position jitter by adding small noise to direction vectors
+            noise = torch.randn_like(direction, device=device) * float(position_jitter)
+            direction = torch.nn.functional.normalize(direction + noise, dim=-1)
+            pert_direction_spatial = direction  # flattened shape as provided
+            # pdf cannot be computed without vpos and positions
+            pdf = None
+        else:
+            # no perturbation to positions
+            pert_direction_spatial = direction
+            pdf = None
+
+        # Core SG evaluation (same as forward)
+        weight, theta, phi, lamb = self.deparameterize()
+        axis = self.get_axis(theta, phi)  # [l, sg, 3]
+        cos_angle = einsum(direction, axis, "l b c, l sg c -> l b sg")
+        cos_angle = rearrange(cos_angle, "l b sg -> l b sg 1")
+        lamb_r = rearrange(lamb, "l sg 1 -> l 1 sg 1")
+        weight_r = rearrange(weight, "l sg c -> l 1 sg c")
+        sg_val = weight_r * torch.exp(lamb_r * (cos_angle - 1))  # [l, b, sg, c]
+        sg_val = torch.sum(sg_val, dim=2)  # [l, b, c]
+
+        l = sg_val.shape[0]
+
+        # Random mask for lights
+        mask_bool = torch.rand(l, device=device) > float(disable_prob)
+        mask = mask_bool.to(dtype=sg_val.dtype)
+        mask = rearrange(mask, "l -> l 1 1")
+
+        # Intensity jitter per light
+        intensity_scale = 1.0 + (torch.rand(l, device=device) * 2 - 1) * float(
+            intensity_jitter
+        )  # [l]
+        intensity_scale = rearrange(intensity_scale, "l -> l 1 1")
+
+        # Apply intensity (and optionally color) jitter
+        sg_val = sg_val * intensity_scale
         sg_val = mask * sg_val
 
-        return sg_val, mask.squeeze()
-    
+        # return mask as boolean per-light, pdf (if computed), perturbed direction (spatial or flattened),
+        # and perturbed positions (if any)
+        return (
+            sg_val,
+            mask_bool,
+            pdf,
+            pert_direction_spatial,
+            (pert_positions if pert_positions is not None else None),
+        )
+
     def val_reg_loss(self):
         val = self.deparameterize_weight()
 
         # Mask disabled lights
-        val = rearrange(self.is_enabled, 'l -> l 1 1') * val
+        val = rearrange(self.is_enabled, "l -> l 1 1") * val
 
         val = torch.mean(val) * 3
         return val
 
     def pos_reg_loss(self):
-        pos = 1 / self.nearest_dist_sqr.clamp(min=1e-6)
+        pos = 1 / self.nearest_dist_sqr.clamp(min=1e-3)
 
         # Mask disabled lights
-        pos = rearrange(self.is_enabled, 'l -> l 1 1') * pos
+        pos = rearrange(self.is_enabled, "l -> l 1 1") * pos
 
         return torch.mean(pos)
 
@@ -523,7 +655,13 @@ class ComposeLighting(nn.Module):
         :param normal: BS x SPP x 3 x H x W
         :return:
         """
-        return torch.cat([lighting.sample_direction(vpos=vpos, normal=normal) for lighting in self.lighting_values], dim=1)
+        return torch.cat(
+            [
+                lighting.sample_direction(vpos=vpos, normal=normal)
+                for lighting in self.lighting_values
+            ],
+            dim=1,
+        )
 
     def pdf_direction(self, vpos, direction):
         """
@@ -531,29 +669,54 @@ class ComposeLighting(nn.Module):
         :param vpos: BS x SPP x 3 x H x W
         :return:
         """
-        return torch.cat([lighting.pdf_direction(vpos=vpos, direction=dir) for lighting, dir in zip(self.lighting_values, torch.split(direction, self.sub_spps, dim=1))], dim=1)
+        return torch.cat(
+            [
+                lighting.pdf_direction(vpos=vpos, direction=dir)
+                for lighting, dir in zip(
+                    self.lighting_values, torch.split(direction, self.sub_spps, dim=1)
+                )
+            ],
+            dim=1,
+        )
 
     def forward(self, direction):
         """
         Each direction goes for each light sources separately
         :param direction: N x 3
         :return:
-        """   #self.sub_spps:[48,1]
-        return torch.cat([lighting(direction=dir) for lighting, dir in zip(self.lighting_values, torch.split(direction, self.sub_spps))], dim=0)
+        """  # self.sub_spps:[48,1]
+        return torch.cat(
+            [
+                lighting(direction=dir)
+                for lighting, dir in zip(
+                    self.lighting_values, torch.split(direction, self.sub_spps)
+                )
+            ],
+            dim=0,
+        )
 
     def val_reg_loss(self):
         """
         Calculate the regularization loss for each light sources separately
         :return:
         """
-        val_regs = torch.stack([lighting.val_reg_loss() for lighting in self.lighting_values], dim=0)
-        return torch.sum(torch.tensor(self.sub_spps, device=val_regs.device) * val_regs) / self.spp
+        val_regs = torch.stack(
+            [lighting.val_reg_loss() for lighting in self.lighting_values], dim=0
+        )
+        return (
+            torch.sum(torch.tensor(self.sub_spps, device=val_regs.device) * val_regs)
+            / self.spp
+        )
 
     def pos_reg_loss(self):
         """
         Calculate the regularization loss for each light sources separately
         :return:
         """
-        pos_regs = torch.stack([lighting.pos_reg_loss() for lighting in self.lighting_values], dim=0)
-        return torch.sum(torch.tensor(self.sub_spps, device=pos_regs.device) * pos_regs) / self.spp
-
+        pos_regs = torch.stack(
+            [lighting.pos_reg_loss() for lighting in self.lighting_values], dim=0
+        )
+        return (
+            torch.sum(torch.tensor(self.sub_spps, device=pos_regs.device) * pos_regs)
+            / self.spp
+        )

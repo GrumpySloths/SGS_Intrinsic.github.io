@@ -43,7 +43,7 @@ class CameraPoseInterpolator:
         q1 = R1.as_quat()
         q2 = R2.as_quat()
         
-        # Ensure quaternions are in the same hemisphere
+        # Ensure quaternions are in the same hemisphere.
         if np.dot(q1, q2) < 0:
             q2 = -q2
         
@@ -67,10 +67,10 @@ class CameraPoseInterpolator:
         assignments = []
 
         for j in range(M):
-            # Compute distance from each training pose to this testing pose
+            # Compute the distance from each training pose to this testing pose.
             distances = [self.compute_pose_distance(training_pose, testing_poses[j])
                          for training_pose in training_poses]
-            # Find the index of the nearest training pose
+            # Find the index of the nearest training pose.
             nearest_index = np.argmin(distances)
             assignments.append(nearest_index)
         
@@ -119,17 +119,17 @@ class CameraPoseInterpolator:
             sequence = []
             
             for t in np.linspace(0, 1, num_steps):
-                # Interpolate rotation
+                # Interpolate rotation.
                 R_interp = self.interpolate_rotation(
                     train_pose[:3, :3],
                     test_pose[:3, :3],
                     t
                 )
                 
-                # Interpolate translation
+                # Interpolate translation.
                 t_interp = (1-t) * train_pose[:3, 3] + t * test_pose[:3, 3]
                 
-                # Construct interpolated pose
+                # Construct the interpolated pose.
                 pose_interp = np.eye(4)
                 pose_interp[:3, :3] = R_interp
                 pose_interp[:3, 3] = t_interp

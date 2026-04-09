@@ -39,7 +39,7 @@ def estimate_depth_normal_omni(img,mode='test'):
                 size=(h//downsampling, w//downsampling),
                 mode="bicubic",
                 align_corners=False,
-            ).squeeze()  #这里squeeze函数直接把前面所有的1都去掉了，不管前面有几个1
+            ).squeeze()  # squeeze removes all singleton dimensions.
 
             prediction_normal = omni_normal(norm_img) #shape:[1,3,384,512]
             prediction_normal = torch.nn.functional.interpolate(
@@ -55,13 +55,13 @@ def estimate_depth_normal_omni(img,mode='test'):
 
 def normal_to_geowizard(normal):
     """
-    将法线从OmniData模型的输出格式转换为GeoWizard所使用的法线模型空间。
-    
+    Convert normals from Omnidata output format to the normal space used by GeoWizard.
+
     Args:
-        normal (torch.Tensor or np.ndarray): [3, H, W] OmniData模型输出的法线
+        normal (torch.Tensor or np.ndarray): [3, H, W] normals produced by the Omnidata model
 
     Returns:
-        torch.Tensor or np.ndarray: [3, H, W] GeoWizard所使用的法线
+        torch.Tensor or np.ndarray: [3, H, W] normals used by GeoWizard
     """
 
     if isinstance(normal, torch.Tensor):

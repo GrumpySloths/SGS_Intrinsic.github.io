@@ -6,7 +6,7 @@ import nvdiffrast.torch as dr
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from arguments.config_r3dg import OptimizationParams
+from arguments.config import OptimizationParams
 from .renderutils import diffuse_cubemap, specular_cubemap
 
 
@@ -37,7 +37,9 @@ class cubemap_mip(torch.autograd.Function):
     @staticmethod
     def backward(ctx, dout: torch.Tensor) -> torch.Tensor:
         res = dout.shape[1] * 2
-        out = torch.zeros(6, res, res, dout.shape[-1], dtype=torch.float32, device="cuda")
+        out = torch.zeros(
+            6, res, res, dout.shape[-1], dtype=torch.float32, device="cuda"
+        )
         for s in range(6):
             gy, gx = torch.meshgrid(
                 torch.linspace(-1.0 + 1.0 / res, 1.0 - 1.0 / res, res, device="cuda"),
@@ -70,7 +72,9 @@ class CubemapLight(nn.Module):
         super(CubemapLight, self).__init__()
         self.mtx = None
         base = (
-            torch.rand(6, base_res, base_res, 3, dtype=torch.float32, device="cuda") * scale + bias
+            torch.rand(6, base_res, base_res, 3, dtype=torch.float32, device="cuda")
+            * scale
+            + bias
         )
 
         # print(torch.isnan(base).any())
@@ -80,13 +84,16 @@ class CubemapLight(nn.Module):
     def xfm(self, mtx) -> None:
         self.mtx = mtx
 
-    def clamp_(self, min: Optional[float]=None, max: Optional[float]=None) -> None:
+    def clamp_(self, min: Optional[float] = None, max: Optional[float] = None) -> None:
         self.base.clamp_(min, max)
 
     def get_mip(self, roughness: torch.Tensor) -> torch.Tensor:
         return torch.where(
             roughness < self.MAX_ROUGHNESS,
-            (torch.clamp(roughness, self.MIN_ROUGHNESS, self.MAX_ROUGHNESS) - self.MIN_ROUGHNESS)
+            (
+                torch.clamp(roughness, self.MIN_ROUGHNESS, self.MAX_ROUGHNESS)
+                - self.MIN_ROUGHNESS
+            )
             / (self.MAX_ROUGHNESS - self.MIN_ROUGHNESS)
             * (len(self.specular) - 2),
             (torch.clamp(roughness, self.MAX_ROUGHNESS, 1.0) - self.MAX_ROUGHNESS)
@@ -117,8 +124,12 @@ class CubemapLight(nn.Module):
     ) -> Optional[torch.Tensor]:
         # cubemap_to_latlong
         gy, gx = torch.meshgrid(
-            torch.linspace(0.0 + 1.0 / res[0], 1.0 - 1.0 / res[0], res[0], device="cuda"),
-            torch.linspace(-1.0 + 1.0 / res[1], 1.0 - 1.0 / res[1], res[1], device="cuda"),
+            torch.linspace(
+                0.0 + 1.0 / res[0], 1.0 - 1.0 / res[0], res[0], device="cuda"
+            ),
+            torch.linspace(
+                -1.0 + 1.0 / res[1], 1.0 - 1.0 / res[1], res[1], device="cuda"
+            ),
             indexing="ij",
         )
 
@@ -133,9 +144,7 @@ class CubemapLight(nn.Module):
             reflvec[None, ...].contiguous(),
             filter_mode="linear",
             boundary_mode="cube",
-        )[
-            0
-        ]  # [H, W, 3]
+        )[0]  # [H, W, 3]
         if return_img:
             return color
         else:
@@ -143,10 +152,14 @@ class CubemapLight(nn.Module):
 
     def training_setup(self, training_args: OptimizationParams):
         param_groups = [
-            {"name": "cubemap", "params": self.parameters(), "lr": training_args.cubemap_lr},
+            {
+                "name": "cubemap",
+                "params": self.parameters(),
+                "lr": training_args.cubemap_lr,
+            },
         ]
         self.optimizer = torch.optim.Adam(param_groups, lr=training_args.cubemap_lr)
-    
+
     def capture(self):
         captured_list = [
             self.parameters(),
@@ -154,8 +167,8 @@ class CubemapLight(nn.Module):
         ]
 
         return captured_list
-    
-    # 恢复
+
+    # Restore from checkpoint.
     def create_from_ckpt(self, checkpoint_path, restore_optimizer=False):
         model_state, opt_state, first_iter = torch.load(checkpoint_path)
         self.load_state_dict(model_state)
@@ -168,18 +181,18 @@ class CubemapLight(nn.Module):
 
     def save_ckpt(self, checkpoint_path, current_iter=None):
         """
-        保存模型和优化器的状态到 checkpoint_path。
+        Save the model and optimizer state to checkpoint_path.
 
         Args:
-            checkpoint_path (str): 保存文件路径
-            current_iter (int, optional): 当前训练轮次或步数
+            checkpoint_path (str): Path to the checkpoint file.
+            current_iter (int, optional): Current training iteration or step.
         """
         model_state = self.state_dict()
-        opt_state = self.optimizer.state_dict() if hasattr(self, 'optimizer') else None
-        # 保存当前轮次，便于恢复训练
+        opt_state = self.optimizer.state_dict() if hasattr(self, "optimizer") else None
+        # Save the current iteration so training can be resumed later.
         ckpt = (model_state, opt_state, current_iter)
         torch.save(ckpt, checkpoint_path)
-    
+
     def step(self):
         self.optimizer.step()
         self.optimizer.zero_grad()

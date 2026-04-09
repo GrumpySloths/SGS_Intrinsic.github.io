@@ -46,6 +46,7 @@ def compute_Ls(F_hat, F_gt, S_hat, S_gt):
     # Flatten spatial dims for cosine_similarity
     cos_loss = 1 - F.cosine_similarity(F_hat, F_gt, dim=1).mean()
 
+    S_gt=S_gt.long()
     # 2. Cross entropy loss
     ce_loss = F.cross_entropy(S_hat, S_gt)
 
@@ -56,20 +57,20 @@ def compute_Ls(F_hat, F_gt, S_hat, S_gt):
 
 def self_albedo_lightinvariance_loss(albedo_samples, albedo_gs, mask, msgloss):
     """
-    计算albedo光照不变性loss
+    Compute the lighting-invariance loss for albedo.
 
     Args:
-        albedo_samples: [3, 3, H, W]，同一图片不同光照采样逆渲染得到的albedo
-        albedo_gs: [3, H, W]，由gaussian渲染直接得到的albedo
-        mask: [1, H, W]，掩码
-        msgloss: MSGLoss类实例
+        albedo_samples: [2, 3, H, W], albedo estimated from inverse rendering under different lighting samples for the same image
+        albedo_gs: [3, H, W], albedo rendered directly from Gaussians
+        mask: [1, H, W], mask
+        msgloss: MSGLoss instance
 
     Returns:
-        total_loss: 标量损失值
+        total_loss: scalar loss value
     """
     total_loss = 0.0
-    # 只与第0和第2个采样albedo做loss
-    for idx in [0, 2]:
+    # Compute the loss against the 0th and 1st sampled albedos.
+    for idx in [0, 1]:
         sample_albedo = albedo_samples[idx]  # [3, H, W]
         # l2 mask loss
         l2 = l2_loss_mask(albedo_gs, sample_albedo, mask)
@@ -77,53 +78,53 @@ def self_albedo_lightinvariance_loss(albedo_samples, albedo_gs, mask, msgloss):
         msg = msgloss(albedo_gs.unsqueeze(0), sample_albedo.unsqueeze(0), mask.unsqueeze(0))
         total_loss += l2 + msg
     
-    total_loss /= 2.0  # 平均损失
+    total_loss /= 2.0  # Average the loss.
     return total_loss
 
     
 def inter_view_loss(F, M):
     """
-    计算伪视角和真实视角之间的对齐损失
+    Compute the alignment loss between pseudo views and the real view.
     
     Args:
-        F: 特征张量，shape为[3, 64, H, W]，其中F[1]为真实视角
-        M: 掩码张量，shape为[3, 1, H, W]，其中M[1]为真实视角掩码
+        F: feature tensor with shape [3, 64, H, W], where F[1] is the real view
+        M: mask tensor with shape [3, 1, H, W], where M[1] is the real-view mask
     
     Returns:
-        loss: 标量损失值
+        loss: scalar loss value
     """
-    # 确保输入在同一设备上
+    # Ensure the inputs are on the same device.
     F = F.to(F.device)
     M = M.to(F.device)
     
-    # 获取真实视角的特征和掩码
-    F_real = F[1]  # [64, H, W] - 真实视角特征
-    M_real = M[1]  # [1, H, W] - 真实视角掩码
+    # Extract the real-view features and mask.
+    F_real = F[1]  # [64, H, W] - real-view features
+    M_real = M[1]  # [1, H, W] - real-view mask
     
-    # 计算真实视角的归一化特征 (分母)
-    # F_real * M_real 后在空间维度求和，得到 [64]
+    # Compute the normalized real-view feature vector (denominator).
+    # Summing F_real * M_real over spatial dimensions yields [64].
     F_real_masked = F_real * M_real  # [64, H, W]
     M_real_sum = M_real.sum(dim=(-2, -1), keepdim=True)  # [1, 1, 1]
     F_real_norm = F_real_masked.sum(dim=(-2, -1)) / (M_real_sum.squeeze() + 1e-8)  # [64]
     
     total_loss = 0.0
-    P = 2  # 伪视角数量
+    P = 2  # Number of pseudo views.
     
-    # 遍历伪视角 (p=0, p=2，跳过p=1真实视角)
+    # Iterate over pseudo views (p=0 and p=2, skipping the real view at p=1).
     for p in range(3):
-        if p == 1:  # 跳过真实视角
+        if p == 1:  # Skip the real view.
             continue
             
-        # 获取第p个伪视角的特征和掩码
+        # Extract the features and mask for the p-th pseudo view.
         F_p = F[p]  # [64, H, W]
         M_p = M[p]  # [1, H, W]
         
-        # 计算伪视角的归一化特征 (分子第一项)
+        # Compute the normalized pseudo-view feature vector (numerator term).
         F_p_masked = F_p * M_p  # [64, H, W]
         M_p_sum = M_p.sum(dim=(-2, -1), keepdim=True)  # [1, 1, 1]
         F_p_norm = F_p_masked.sum(dim=(-2, -1)) / (M_p_sum.squeeze() + 1e-8)  # [64]
         
-        # 计算损失项: ||F_p^* ⊙ M_p^* / ∑M_p^* - F̂ ⊙ M / ∑M||_2
+        # Compute the loss term: ||F_p^* ⊙ M_p^* / ∑M_p^* - F̂ ⊙ M / ∑M||_2
         loss_term = torch.norm(F_p_norm - F_real_norm, p=2)
         total_loss += loss_term
     
@@ -131,23 +132,23 @@ def inter_view_loss(F, M):
 
 def inter_view_albedo_loss(A, M):
     """
-    计算伪视角和真实视角之间的albedo对齐损失
+    Compute the albedo alignment loss between pseudo views and the real view.
 
     Args:
-        A: albedo张量，shape为[3, 3, H, W]，其中A[1]为真实视角
-        M: 掩码张量，shape为[3, 1, H, W]，其中M[1]为真实视角掩码
+        A: albedo tensor with shape [3, 3, H, W], where A[1] is the real view
+        M: mask tensor with shape [3, 1, H, W], where M[1] is the real-view mask
 
     Returns:
-        loss: 标量损失值
+        loss: scalar loss value
     """
     A = A.to(A.device)
     M = M.to(A.device)
 
-    # 获取真实视角的albedo和掩码
+    # Extract the real-view albedo and mask.
     A_real = A[1]  # [3, H, W]
     M_real = M[1]  # [1, H, W]
 
-    # 计算真实视角的归一化albedo
+    # Compute the normalized real-view albedo.
     A_real_masked = A_real * M_real  # [3, H, W]
     M_real_sum = M_real.sum(dim=(-2, -1), keepdim=True)  # [1, 1, 1]
     A_real_norm = A_real_masked.sum(dim=(-2, -1)) / (M_real_sum.squeeze() + 1e-8)  # [3]
@@ -171,32 +172,12 @@ def inter_view_albedo_loss(A, M):
     return total_loss
 
 
-# def region_majority_class(S, M, omega_s=None):
-#     """
-#     S: [num_class, H, W] softmax概率
-#     M: [1, H, W] 区域掩码
-#     omega_s: [num_class] 类别权重，可选
-#     返回: 区域主类别索引 int
-#     """
-#     # [num_class, H, W] -> [num_class, N]
-#     mask = M.bool()
-#     S_masked = S[:, mask[0]]  # [num_class, N]
-#     if omega_s is not None:
-#         S_masked = S_masked * omega_s[:, None]
-#     # 每个像素的最大类别
-#     pixel_cls = S_masked.argmax(dim=0)  # [N]
-#     # 区域内最大投票类别
-#     cls, counts = pixel_cls.unique(return_counts=True)
-#     majority_cls = cls[counts.argmax()].item()
-#     return majority_cls
-
-# ...existing code...
 def region_majority_class(S, M, omega_s=None):
     """
-    S: [num_class, H, W] softmax概率
-    M: [1, H, W] 区域掩码
-    omega_s: [num_class] 类别权重，可选
-    返回: 区域主类别索引 int
+    S: [num_class, H, W] softmax probabilities
+    M: [1, H, W] region mask
+    omega_s: [num_class] optional class weights
+    Returns: region-majority class index (int)
     """
     # [num_class, H, W] -> [num_class, N]
     mask = M.bool()
@@ -214,28 +195,28 @@ def region_majority_class(S, M, omega_s=None):
 
     if omega_s is not None:
         S_masked = S_masked * omega_s[:, None]
-    # 每个像素的最大类别
+    # Class with the maximum score for each pixel
     pixel_cls = S_masked.argmax(dim=0)  # [N]
-    # 区域内最大投票类别
+    # Majority-vote class within the region
     cls, counts = pixel_cls.unique(return_counts=True)
     majority_cls = cls[counts.argmax()].item()
     return majority_cls
 
 def region_semantic_uniform(S, M, omega_s=None):
     """
-    S: [num_class, H, W] softmax概率
-    M: [1, H, W] 区域掩码
-    omega_s: [num_class] 类别权重，可选
-    返回: 区域主类别的one-hot [num_class, H, W]
+    S: [num_class, H, W] softmax probabilities
+    M: [1, H, W] region mask
+    omega_s: [num_class] optional class weights
+    Returns: one-hot encoding of the region majority class [num_class, H, W]
     """
     majority_cls = region_majority_class(S, M, omega_s)
 
     if majority_cls is None:
-        # mask区域内没有像素，返回全0
+        # No pixels fall inside the mask; return all zeros.
         return None
     one_hot = torch.zeros_like(S)
     one_hot[majority_cls] = 1.0
-    return one_hot * M  # 只在mask区域内有效
+    return one_hot * M  # Only valid inside the mask.
 
 def inter_view_loss_semantic(Features, M, S, omega_s=None):
     """
@@ -248,22 +229,22 @@ def inter_view_loss_semantic(Features, M, S, omega_s=None):
     total_loss = 0.0
     total_sem_loss = 0.0
 
-    # 真实视角
+    # Real view.
     F_real = Features[1]
     M_real = M[1]
     S_real = S[1]
 
-    # 区域归一化特征
+    # Region-normalized features.
     F_real_masked = F_real * M_real
     M_real_sum = M_real.sum(dim=(-2, -1), keepdim=True)
     F_real_norm = F_real_masked.sum(dim=(-2, -1)) / (M_real_sum.squeeze() + 1e-8)
 
-    # 区域主类别 one-hot
+    # Region majority class one-hot.
     S_real_softmax = F.softmax(S_real, dim=0)
     region_onehot = region_semantic_uniform(S_real_softmax, M_real, omega_s)  # [num_class, H, W]
 
     if region_onehot is None:
-        # mask区域内没有像素，直接返回0 loss
+        # No pixels fall inside the mask; return zero loss directly.
         return torch.tensor(0.0, device=device)
 
     for p in [0, 2]:
@@ -271,22 +252,22 @@ def inter_view_loss_semantic(Features, M, S, omega_s=None):
         M_p = M[p]
         S_p = S[p]
 
-        # 特征对齐损失
+        # Feature alignment loss.
         F_p_masked = F_p * M_p
         M_p_sum = M_p.sum(dim=(-2, -1), keepdim=True)
         F_p_norm = F_p_masked.sum(dim=(-2, -1)) / (M_p_sum.squeeze() + 1e-8)
         total_loss += torch.norm(F_p_norm - F_real_norm, p=2)
 
-        # 区域语义一致性损失
+        # Region semantic consistency loss.
         S_p_softmax = F.softmax(S_p, dim=0)
-        # reshape region_onehot 到 S_p shape
+        # Reshape region_onehot to match S_p.
         region_onehot_reshape = region_onehot  # [num_class, H, W]
-        # 交叉熵损失（只在mask区域内）
+        # Cross-entropy loss (masked region only).
         log_prob = torch.log(S_p_softmax + 1e-8)
         sem_loss = -(region_onehot_reshape * log_prob * M_p).sum() / (M_p.sum() + 1e-8)
         total_sem_loss += sem_loss
 
-    # 平均
+    # Average.
     total_loss = total_loss / 2.0
     total_sem_loss = total_sem_loss / 2.0
 
@@ -295,45 +276,45 @@ def inter_view_loss_semantic(Features, M, S, omega_s=None):
 
 def normal_consistency_loss_robust(n_hat, n_m, epsilon=1e-8):
     """
-    计算法向量一致性损失（鲁棒版本）
+    Compute a robust normal-consistency loss.
     
     Args:
-        n_hat: Gaussian预测的法向量，shape为[C, H, W]
-        n_m: 神经网络预测的法向量，shape为[C, H, W]
-        epsilon: 数值稳定性参数
+        n_hat: Gaussian-predicted normals, shape [C, H, W]
+        n_m: network-predicted normals, shape [C, H, W]
+        epsilon: numerical stability parameter
     
     Returns:
-        loss: 标量损失值
+        loss: scalar loss value
     """
-    # 确保输入是tensor并在同一设备上
+    # Ensure the inputs are tensors on the same device.
     if not isinstance(n_hat, torch.Tensor):
         n_hat = torch.tensor(n_hat)
     if not isinstance(n_m, torch.Tensor):
         n_m = torch.tensor(n_m)
     n_m = n_m.to(n_hat.device)
     
-    # 将shape从[C, H, W]转换为[C, H*W]
+    # Reshape from [C, H, W] to [C, H*W].
     C, H, W = n_hat.shape
     n_hat_flat = n_hat.view(C, -1)  # [C, H*W]
     n_m_flat = n_m.view(C, -1)      # [C, H*W]
     
-    # 计算向量的模长
+    # Compute vector magnitudes.
     n_hat_norm = torch.sqrt(torch.sum(n_hat_flat ** 2, dim=0) + epsilon)  # [H*W]
     n_m_norm = torch.sqrt(torch.sum(n_m_flat ** 2, dim=0) + epsilon)      # [H*W]
     
-    # 计算点积
+    # Compute the dot product.
     dot_product = torch.sum(n_hat_flat * n_m_flat, dim=0)  # [H*W]
     
-    # 计算余弦相似度
+    # Compute cosine similarity.
     cosine_similarity = dot_product / (n_hat_norm * n_m_norm + epsilon)
     
-    # 将余弦相似度限制在[-1, 1]范围内，避免数值误差
+    # Clamp cosine similarity to [-1, 1] to avoid numerical issues.
     cosine_similarity = torch.clamp(cosine_similarity, -1.0, 1.0)
     
-    # 计算损失：L_m = 1 - cosine_similarity
+    # Compute the loss: L_m = 1 - cosine_similarity.
     loss_per_pixel = 1.0 - cosine_similarity
     
-    # 返回平均损失
+    # Return the average loss.
     loss = torch.mean(loss_per_pixel)
     
     return loss

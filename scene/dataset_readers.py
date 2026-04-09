@@ -80,8 +80,10 @@ def getNerfppNorm(cam_info):
 
     return {"translate": translate, "radius": radius}
 
-def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, semantic_feature_folder,relevancymap_folder,path, rgb_mapping):
+def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, semantic_feature_folder,
+                      relevancymap_folder,path, rgb_mapping,use_pbr=True):
     cam_infos = []
+    print("start reading colmap cameras...")
     for idx, key in enumerate(sorted(cam_extrinsics.keys())):
         sys.stdout.write('\r')
         # the exact output you're looking for:
@@ -94,7 +96,7 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, semantic_fe
         width = intr.width
 
         uid = intr.id
-        R = np.transpose(qvec2rotmat(extr.qvec)) #这里的R是对相机外参进行转置过的，即c2w的R
+        R = np.transpose(qvec2rotmat(extr.qvec))  # This R is the transposed camera extrinsic rotation, i.e. the c2w rotation.
         T = np.array(extr.tvec)
         # bounds = np.load(os.path.join(path, 'poses_bounds.npy'))[idx, -2:]
 
@@ -115,8 +117,9 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, semantic_fe
         # Check if image_path matches the pattern "{id}_im_denoised.png"
         albedo = None
         roughness = None
+        metallic=None
         match = re.match(r"(\d+)_im_denoised\.png", os.path.basename(image_path))
-        if match:
+        if match and use_pbr==True:
             img_id = match.group(1)
             albedo_path = os.path.join(images_folder, f"{img_id}_albedo.png")
             rough_path = os.path.join(images_folder, f"{img_id}_material_rough.png")
@@ -124,12 +127,12 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, semantic_fe
             mask_path = os.path.join(images_folder, f"{img_id}_mask.png")
             if os.path.exists(albedo_path):
                 albedo = Image.open(albedo_path)
-                # print("读取albedo图像:", albedo_path) #该代码作为debug用
+                # print("Read albedo image:", albedo_path)  # Debug only.
             if os.path.exists(rough_path):
                 roughness = Image.open(rough_path)
                 metallic = Image.open(metallic_path) if os.path.exists(metallic_path) else None
                 mask = Image.open(mask_path) if os.path.exists(mask_path) else None
-        elif os.path.exists(os.path.join(path,"images_albedo")):
+        elif os.path.exists(os.path.join(path,"images_albedo")) and use_pbr==True:
             albedo_basename = os.path.basename(image_path)
             roughness_basename = os.path.basename(image_path)
             
@@ -141,6 +144,8 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, semantic_fe
                 
             albedo = Image.open(os.path.join(path,"images_albedo", albedo_basename))
             roughness = Image.open(os.path.join(path,"images_roughness", roughness_basename))
+            mask=None
+            metallic=None
         else:
             albedo = None
             roughness = None
@@ -151,11 +156,19 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, semantic_fe
         # image = Image.open(rgb_path)
         image = Image.open(image_path)
 
-        semantic_feature_path = os.path.join(semantic_feature_folder, image_name) + '_fmap_CxHxW.pt' 
-        semantic_feature_name = os.path.basename(semantic_feature_path).split(".")[0]
-        semantic_feature = torch.load(semantic_feature_path) 
-        relevancymap_path=os.path.join(relevancymap_folder, image_name) + '_relevancy.npy'
-        relevancymap = np.load(relevancymap_path) if os.path.exists(relevancymap_path) else None
+        if use_pbr:
+            print("use_pbr is True,data loading with pbr attributes.")
+            semantic_feature = None
+            relevancymap = None
+            semantic_feature_path = ""
+            semantic_feature_name = ""
+        else:
+            print("use_pbr is False,data loading with semantic features.")
+            semantic_feature_path = os.path.join(semantic_feature_folder, image_name) + '_fmap_CxHxW.pt' 
+            semantic_feature_name = os.path.basename(semantic_feature_path).split(".")[0]
+            semantic_feature = torch.load(semantic_feature_path) 
+            relevancymap_path=os.path.join(relevancymap_folder, image_name) + '_relevancy.npy'
+            relevancymap = np.load(relevancymap_path) if os.path.exists(relevancymap_path) else None
 
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image, image_path=image_path,
                 image_name=image_name, width=width, height=height, mask=mask, bounds=None,
@@ -457,7 +470,7 @@ def readColmapSceneInfo_dust3r_modify(path, images, eval, dataset, n_views=0, ll
     )
     return scene_info
 
-def readColmapSceneInfo_vggt(path, images, eval, dataset, n_views=0, llffhold=8, foundation_model='lseg'):
+def readColmapSceneInfo_vggt(path, images, eval, dataset, n_views=0, llffhold=8, foundation_model='lseg',use_pbr=True):
     # 固定从 sparse/0 读取相机参数
     cameras_extrinsic_file = os.path.join(path, "sparse", "images.txt")
     cameras_intrinsic_file = os.path.join(path, "sparse", "cameras.txt")
@@ -481,7 +494,8 @@ def readColmapSceneInfo_vggt(path, images, eval, dataset, n_views=0, llffhold=8,
         semantic_feature_folder=semantic_feature_folder,
         relevancymap_folder=relevancymap_folder,
         path=path,
-        rgb_mapping=rgb_mapping
+        rgb_mapping=rgb_mapping,
+        use_pbr=use_pbr
     )
     def extract_number(filename):
         match = re.search(r'\d+', filename.stem)
@@ -560,57 +574,97 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
 
             # get the world-to-camera transform and set R, T
             w2c = np.linalg.inv(c2w)
-            R = np.transpose(w2c[:3,:3])  # R is stored transposed due to 'glm' in CUDA code
+            R = np.transpose(w2c[:3, :3])  # R is stored transposed due to 'glm' in CUDA code
             T = w2c[:3, 3]
 
             image_path = os.path.join(path, cam_name)
             image_name = Path(cam_name).stem
+
+            # load main image and convert/flatten alpha
             image = Image.open(image_path)
-
             im_data = np.array(image.convert("RGBA"))
-
-            bg = np.array([1,1,1]) if white_background else np.array([0, 0, 0])
-
+            bg = np.array([1, 1, 1]) if white_background else np.array([0, 0, 0])
             norm_data = im_data / 255.0
-            arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
-            image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
+            arr = norm_data[:, :, :3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
+            mask = norm_data[:, :, 3:4]
 
+            # attempt to load depth if available (kept for backward compatibility but not stored in CameraInfo)
+            if skip == 1:
+                try:
+                    depth_image = np.load('../SparseNeRF/depth_midas_temp_DPT_Hybrid/Blender/' +
+                                          image_path.split('/')[-4] + '/' + image_name + '_depth.npy')
+                except:
+                    depth_image = None
+            else:
+                depth_image = None
+
+            # Resize image (same behavior as original)
+            arr_resized = cv2.resize(arr, (400, 400))
+            image_resized = Image.fromarray(np.array(arr_resized * 255.0, dtype=np.byte), "RGB")
+            depth_resized = None if depth_image is None else cv2.resize(depth_image, (400, 400))
+            mask_resized = None if mask is None else cv2.resize(mask, (400, 400))
+
+            # compute fov values using original image dimensions (before resize)
             fovy = focal2fov(fov2focal(fovx, image.size[0]), image.size[1])
             FovY = fovy
             FovX = fovx
 
-            mask = norm_data[:, :, 3:4]
-            if skip == 1:
-                depth_image = np.load('../SparseNeRF/depth_midas_temp_DPT_Hybrid/Blender/' +
-                                      image_path.split('/')[-4]+'/'+image_name+'_depth.npy')
-            else:
-                depth_image = None
+            # locate albedo and roughness in the sibling folder of the rgba folder
+            # frame["file_path"] is like "./train_007/rgba" -> parent folder is train_007
+            rgba_dir = os.path.dirname(os.path.join(path, frame["file_path"]))
+            # parent_dir = os.path.dirname(rgba_dir)
+            albedo_path = os.path.join(rgba_dir, "albedo_diffrender.png")
+            roughness_path = os.path.join(rgba_dir, "roughness_diffrender.png")
 
-            arr = cv2.resize(arr, (400, 400))
-            image = Image.fromarray(np.array(arr * 255.0, dtype=np.byte), "RGB")
-            depth_image = None if depth_image is None else cv2.resize(depth_image, (400, 400))
-            mask = None if mask is None else cv2.resize(mask, (400, 400))
+            def load_and_flatten(pth):
+                if not os.path.exists(pth):
+                    return None
+                im = Image.open(pth)
+                im_data_local = np.array(im.convert("RGBA"))
+                norm_local = im_data_local / 255.0
+                arr_local = norm_local[:, :, :3] * norm_local[:, :, 3:4] + bg * (1 - norm_local[:, :, 3:4])
+                arr_local_resized = cv2.resize(arr_local, (400, 400))
+                return Image.fromarray(np.array(arr_local_resized * 255.0, dtype=np.byte), "RGB")
 
+            albedo_img = load_and_flatten(albedo_path)
+            roughness_img = load_and_flatten(roughness_path)
 
-            cam_infos.append(CameraInfo(uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image, image_path=image_path,
-                                        image_name=image_name, width=image.size[0], height=image.size[1],
-                                        depth_image=depth_image, mask=mask))
+            # Build CameraInfo with fields expected by the rest of the code. Fill missing optional fields with None/empty.
+            cam_infos.append(CameraInfo(
+                uid=idx,
+                R=R,
+                T=T,
+                FovY=FovY,
+                FovX=FovX,
+                image=image_resized,
+                albedo=albedo_img,
+                roughness=roughness_img,
+                metallic=None,
+                image_path=image_path,
+                image_name=image_name,
+                width=image_resized.size[0],
+                height=image_resized.size[1],
+                mask=mask_resized,
+                bounds=None,
+                relevancymap=None,
+                semantic_feature=None,
+                semantic_feature_path="",
+                semantic_feature_name=""
+            ))
     return cam_infos
 
-#这是一个暂时的选项，主要是用来比较自已之前ppt上稀疏视角下的relightable gaussian的法线重建效果
-def readNerfSyntheticInfo_r3dg(path, white_background, eval, extension=".png", debug=False,n_views=0):
+def readNerfSyntheticInfo(path, white_background, eval, n_views=0, extension=".png"):
     print("Reading Training Transforms")
-    train_cam_infos = readCamerasFromTransforms(path, "transforms_train.json", white_background, extension, debug=debug,
-                                                sparse_settings=(n_views>0))
-    if eval:
-        print("Reading Test Transforms")
-        test_cam_infos = readCamerasFromTransforms(path, "transforms_test.json", white_background, extension,
-                                                   debug=debug,sparse_settings=(n_views>0))
-    else:
-        test_cam_infos = []
+    train_cam_infos = readCamerasFromTransforms(path, "transforms_train.json", white_background, extension)
+    print("Reading Test Transforms")
+    test_cam_infos = readCamerasFromTransforms(path, "transforms_test.json", white_background, extension)
+
+    print("len of train_cam_infos: ", len(train_cam_infos))
+    print("len of test_cam_infos: ", len(test_cam_infos))
     #添加稀疏视角设置
     if n_views > 0:
         train_cam_infos = train_cam_infos[:n_views]
+        test_cam_infos = test_cam_infos[:n_views]
         assert len(train_cam_infos) == n_views
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
@@ -627,7 +681,7 @@ def readNerfSyntheticInfo_r3dg(path, white_background, eval, extension=".png", d
         normals = np.random.randn(*xyz.shape)
         normals /= np.linalg.norm(normals, axis=-1, keepdims=True)
 
-        storePly(ply_path, xyz, SH2RGB(shs) * 255, normals)
+        storePly(ply_path, xyz, SH2RGB(shs) * 255)
 
     try:
         pcd = fetchPly(ply_path)
@@ -637,42 +691,10 @@ def readNerfSyntheticInfo_r3dg(path, white_background, eval, extension=".png", d
     scene_info = SceneInfo(point_cloud=pcd,
                            train_cameras=train_cam_infos,
                            test_cameras=test_cam_infos,
+                           eval_cameras=[],
                            nerf_normalization=nerf_normalization,
                            ply_path=ply_path)
 
-    return scene_info
-
-def readNerfSyntheticInfo(path, white_background, eval, n_views=0, extension=".png"):
-    print("Reading Training Transforms")
-    train_cam_infos = readCamerasFromTransforms(path, "transforms_train.json", white_background, extension)
-    print("Reading Test Transforms")
-    test_cam_infos = readCamerasFromTransforms(path, "transforms_test.json", white_background, extension)
-
-    if not eval:
-        train_cam_infos.extend(test_cam_infos)
-        test_cam_infos = []
-
-    pseudo_cam_infos = train_cam_infos #train_cam_infos
-    if n_views > 0:
-        train_cam_infos = train_cam_infos[:n_views]
-        assert len(train_cam_infos) == n_views
-
-    nerf_normalization = getNerfppNorm(train_cam_infos)
-
-    ply_path = os.path.join(path, str(n_views) + "_views/dense/fused.ply")
-
-    try:
-        pcd = fetchPly(ply_path)
-    except:
-        pcd = None
-
-
-    scene_info = SceneInfo(point_cloud=pcd,
-                           train_cameras=train_cam_infos,
-                           test_cameras=test_cam_infos,
-                           pseudo_cameras=pseudo_cam_infos,
-                           nerf_normalization=nerf_normalization,
-                           ply_path=ply_path)
     return scene_info
 
 
@@ -682,5 +704,4 @@ sceneLoadTypeCallbacks = {
     "Colmap_dust3r_modify": readColmapSceneInfo_dust3r_modify,
     "Colmap_vggt": readColmapSceneInfo_vggt,
     "Blender" : readNerfSyntheticInfo,
-    "Blender_r3dg" : readNerfSyntheticInfo_r3dg
 }

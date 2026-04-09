@@ -119,7 +119,7 @@ def pbr_shading(
     if background is None:
         background = torch.zeros_like(normals)  # [H, W, 3]
 
-    # prepare,整个pbr shading的过程应该都是在世界坐标系下进行建模的
+    # Prepare; the entire PBR shading process should be modeled in world coordinates.
     normals = normals.reshape(1, H, W, 3)
     view_dirs = view_dirs.reshape(1, H, W, 3)
     albedo = albedo.reshape(1, H, W, 3)
@@ -173,7 +173,7 @@ def pbr_shading(
         F0 = torch.ones_like(albedo) * 0.04  # [1, H, W, 3]
     else:
         F0 = (1.0 - metallic) * 0.04 + albedo * metallic
-    reflectance = F0 * fg_lookup[..., 0:1] + fg_lookup[..., 1:2]  # [1, H, W, 3],这是specular项对应的brdf,这里利用了split-sum近似进行解耦
+    reflectance = F0 * fg_lookup[..., 0:1] + fg_lookup[..., 1:2]  # [1, H, W, 3], BRDF term for the specular component using the split-sum approximation.
     specular_rgb = spec * reflectance  # [1, H, W, 3]
     # assert not torch.isnan(reflectance).any(), "Inputs contain NaN"
     # assert not torch.isinf(reflectance).any(), "Inputs contain InF"

@@ -1,124 +1,57 @@
-# Code for How to Use Diffusion Priors under Sparse Views? (NeurIPS 2024)
+# SGS-Intrinsic: Semantic-Invariant Gaussian Splatting for Sparse-View Indoor Inverse Rendering (CVPR 2026)
 
-## Installation
+Jiahao Niu, Rongjia Zheng, Wenju Xu, Wei-shi Zheng, and Qing Zhang*
 
-Ubuntu 22.04, CUDA 11.3, PyTorch 1.12.1
+<!-- project page and paper -->
+<!-- [Project Page](https://dydeblur.github.io/) &nbsp; [Paper](https://arxiv.org/abs/2510.10691)  -->
+[Paper](https://arxiv.org/abs/2603.27516)
 
-``````
-conda env create --file environment.yaml
-conda activate ipsm
+<!-- pageviews -->
+<!-- <a href="https://info.flagcounter.com/dhPB"><img src="https://s01.flagcounter.com/mini/dhPB/bg_FFFFFF/txt_000000/border_FFFFFF/flags_0/" alt="Flag Counter" border="0"></a> -->
 
-pip install ./submodules/diff-gaussian-rasterization-confidence ./simple-knn
-``````
+<!-- teaser -->
+![curve](asset/teaser.svg)
 
-## Pre-trained Models Preparation
+Our method achieves high-quality scene-level disentanglement of illumination and material properties from sparse-view input images
 
+## Method Overview
+![workflow](asset/pipeline.svg)
+
+<!-- Our method's overall workflow. Dotted arrows and dashed arrows describe the pipeline for modeling camera motion blur and modeling defocus blur, respectively at training time. Solid arrows show the process of rendering sharp images at the inference time. Please refer to the paper for more details. -->
+
+## Todo
+<!-- - [ ] ~~Release Paper, Example Code~~ -->
+- [x] ~~Release Paper~~ 
+- [ ] Release Code (Coming soon)
+- [ ] Clean Code
+
+<!-- ## Setup
+###  1. Installation
 ```
-mkdir pretrained_models
-cd pretrained_models
-```
+git clone https://github.com/hhhddddddd/dydeblur.git --recursive 
+cd dydeblur
 
-Download [StableDiffusion-v1.5](https://huggingface.co/runwayml/stable-diffusion-v1-5), [StableDiffusionInpainting-v1.5](https://huggingface.co/runwayml/stable-diffusion-inpainting), [MiDaS](https://github.com/isl-org/MiDaS), [BLIP](https://huggingface.co/Salesforce/blip-image-captioning-base) to ```./pretrained_models/```. (NOTE: Stable Diffusion V1.5 and Stable Diffusion Inpainting V1.5 cannot be downloaded from the original repo, but the same weight can be obtained from other clone repo.)
+conda create -n dydeblur python=3.10
+conda activate dydeblur
 
-## Data Preparation
+# install pytorch
+conda install pytorch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 pytorch-cuda=12.4 -c pytorch -c nvidia -y
 
-### LLFF
-
-1. Download LLFF from [the official download link](https://drive.google.com/drive/folders/128yBriW1IG_3NJ5Rp7APSTZsJqdJdfc1).
-
-2. Run COLMAP to obtain initial point clouds with sparse views:
-
-   ```
-   python tools/colmap_llff.py
-   ```
-
-3. Randomly select one image from sparse views and run BLIP to obtain its blip-based text results:
-
-    ```
-    python ./scripts/script_for_blip.py
-    ```
-
-4. The data format is supposed to be:
-
-    ```
-    |- <scene>
-        |- 3_views
-        |- images
-        |- images_4
-        |- images_8
-        |- sparse
-        |- blip_rst.txt
-        |- poses_bounds.npy
-        |- ...
-    ```
-
-### DTU
-
-1. Download DTU dataset
-
-   - Download the DTU dataset "Rectified (123 GB)" from the [official website](https://roboimagedata.compute.dtu.dk/?page_id=36/), and extract it.
-   - Download masks (used for evaluation only) from [this link](https://drive.google.com/file/d/1Yt5T3LJ9DZDiHbtd9PDFNHqJAd7wt-_E/view?usp=sharing).
-
-2. Preprocess following [DNGaussian](https://github.com/Fictionarry/DNGaussian)
-
-   - Poses: following [gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting), run `convert.py` to get the poses and the undistorted images by COLMAP.
-   - Render Path: following [LLFF](https://github.com/Fyusion/LLFF) to get the `poses_bounds.npy` from the COLMAP data. (Optional)
-
-3. Run COLMAP to obtain initial point clouds with sparse views:
-
-   ```
-   python tools/colmap_dtu.py
-   ```
-
-4. Randomly select one image from sparse views and run BLIP to obtain its blip-based text results:
-
-    ```
-    python blip_script.py
-    ```
-
-5. The data format is supposed to be:
-
-    ```
-    |- <scene>
-        |- 3_views
-        |- images
-        |- images_2
-        |- images_4
-        |- images_8
-        |- mask
-        |- sparse
-        |- blip_rst.txt
-        |- poses_bounds.npy
-        |- ...
-    ```
-
-## Training & Rendering & Evaluating
-
-Train & Render & Evaluate IPSM-Gaussian on the LLFF dataset with 3 views:
-
-```
-python ./scripts/script_for_llff.py
+# install dependencies
+pip install -r requirements.txt
 ```
 
-Train & Render & Evaluate IPSM-Gaussian on the DTU dataset with 3 views:
-
+### 2. Training
 ```
-python ./scripts/script_for_dtu.py
+python train.py -s <dataset> -m <output> -o <expname> -c 0.01 --eval --iterations 40000
 ```
 
-## Acknowledgement
-
-This code is developed on [gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting), [FSGS](https://github.com/VITA-Group/FSGS), and [DNGaussian](https://github.com/Fictionarry/DNGaussian). Thanks for these great projects!
-
-## Citation
-
+### 3. Evaluation
 ```
-@inproceedings{
-wang2024how,
-title={How to Use Diffusion Priors under Sparse Views?},
-author={Qisen Wang and Yifan Zhao and Jiawei Ma and Jia Li},
-booktitle={The Thirty-eighth Annual Conference on Neural Information Processing Systems},
-year={2024},
-url={https://openreview.net/forum?id=i6BBclCymR}
-}
+python render.py -m <output> -o <expname> -c 0.01 -t <time> --mode render 
 ```
+<!-- ![](https://komarev.com/ghpvc/?username=hhhddddddd&color=green) -->
+
+
+
+ 

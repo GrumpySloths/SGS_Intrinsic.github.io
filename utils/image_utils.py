@@ -66,16 +66,16 @@ def show_mask(mask, ax, obj_id=None, random_color=False):
 
 def save_image_with_mask(image: torch.Tensor, mask: torch.Tensor, save_path: str):
     """
-    显示并保存带掩码的图片（原图与掩码叠加）。
-    :param image: [c, h, w] 的图片张量，像素值范围[0,1]或[0,255]
-    :param mask: [1, h, w] 的掩码张量，值为0或1
-    :param save_path: 保存路径
+    Display and save an image with a mask overlay.
+    :param image: image tensor with shape [c, h, w], pixel values in [0,1] or [0,255]
+    :param mask: mask tensor with shape [1, h, w], values in {0, 1}
+    :param save_path: output path
     """
-    # 转为cpu和numpy
+    # Convert to CPU and NumPy.
     img_np = image.detach().cpu().numpy()
     mask_np = mask.detach().cpu().numpy()
 
-    # 处理图片
+    # Process the image.
     if img_np.shape[0] == 1:
         img_np = np.repeat(img_np, 3, axis=0)
     if img_np.max() > 1.0:
@@ -83,10 +83,10 @@ def save_image_with_mask(image: torch.Tensor, mask: torch.Tensor, save_path: str
     img_np = np.transpose(img_np, (1, 2, 0))  # [h, w, c]
 
     mask_np = mask_np.squeeze()
-    # 创建掩码颜色层（红色，带透明度）
+    # Create the mask color layer (red with transparency).
     color_mask = np.zeros_like(img_np)
-    color_mask[..., 0] = 1.0  # 红色通道
-    alpha = 0.5  # 透明度
+    color_mask[..., 0] = 1.0  # Red channel.
+    alpha = 0.5  # Transparency.
     mask_bool = mask_np.astype(bool)
     img_np[mask_bool] = img_np[mask_bool] * (1 - alpha) + color_mask[mask_bool] * alpha
 
@@ -94,10 +94,10 @@ def save_image_with_mask(image: torch.Tensor, mask: torch.Tensor, save_path: str
 
 def save_image_grid_with_masks(images: torch.Tensor, masks: torch.Tensor, save_path: str):
     """
-    将带掩码的图片保存为一个grid。
-    :param images: [3, c, h, w] 的图片张量，像素值范围[0,1]
-    :param masks: [3, 1, h, w] 的掩码张量，值为0或1
-    :param save_path: 保存路径
+    Save a masked image grid.
+    :param images: image tensor with shape [3, c, h, w], pixel values in [0,1]
+    :param masks: mask tensor with shape [3, 1, h, w], values in {0, 1}
+    :param save_path: output path
     """
     grid_imgs = []
     for i in range(images.shape[0]):
@@ -107,7 +107,7 @@ def save_image_grid_with_masks(images: torch.Tensor, masks: torch.Tensor, save_p
             img = img.repeat(3, 1, 1)
         mask = mask.squeeze(0)  # [h, w]
         color_mask = torch.zeros_like(img)
-        color_mask[0] = 1.0  # 红色通道
+        color_mask[0] = 1.0  # Red channel.
         alpha = 0.5
         mask_bool = mask.bool()
         img_overlay = img.clone()

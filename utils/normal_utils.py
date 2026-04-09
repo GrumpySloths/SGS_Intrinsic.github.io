@@ -17,7 +17,7 @@ def world_normal_to_camera_normal(render_normal, c2w, H, W, sign_idx=0):
         torch.Tensor: [3, H, W] 相机坐标系下的法线
     """
 
-    # 生成所有x, y, z为1或-1的全排列
+    # Generate all permutations of x, y, z being 1 or -1.
     # sign_permutations = list(itertools.product([1, -1], repeat=3))
     # if not (0 <= sign_idx < len(sign_permutations)):
     #     raise ValueError(f"sign_idx should be in [0, {len(sign_permutations)-1}]")
@@ -26,7 +26,7 @@ def world_normal_to_camera_normal(render_normal, c2w, H, W, sign_idx=0):
     # sign=torch.tensor([1,-1,-1], device=render_normal.device, dtype=render_normal.dtype).view(3, 1, 1)  # [-1, -1, -1] for rgbx
     sign=torch.tensor([-1,-1,-1], device=render_normal.device, dtype=render_normal.dtype).view(3, 1, 1)  # [-1, -1, -1] for stablenorm
 
-    R = c2w[:3, :3]  # 世界到相机的旋转矩阵
+    R = c2w[:3, :3]  # World-to-camera rotation matrix.
     render_normal_flat = render_normal.reshape(3, -1).T  # [H*W, 3]
     render_normal_cam_flat = torch.matmul(render_normal_flat, R)  # [H*W, 3]
     render_normal_cam = render_normal_cam_flat.T.reshape(3, H, W)

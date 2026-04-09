@@ -19,19 +19,18 @@ import torch.nn.functional as F
 class Camera(nn.Module):
     def __init__(self, colmap_id, R, T, FoVx, FoVy, image, albedo,roughness,metallic,gt_alpha_mask,
                  image_name, uid, trans=np.array([0.0, 0.0, 0.0]),
-                 scale=1.0, data_device = "cuda", depth_image = None, normal_image=None,diffuse=None,
+                 scale=1.0, data_device = "cuda", depth_image = None, normal_image=None,
                  mask = None, bounds=None, height=None, width=None,semantic_feature=None,relevancymap=None):
         super(Camera, self).__init__()
 
-        self.uid = uid  #这里的uid是从0开始的索引，代表其在整个camera list中的位置
+        self.uid = uid  # This uid is a zero-based index representing the camera's position in the full camera list.
         self.colmap_id = colmap_id
-        self.R = R  #注意这里传入的R实际上仍然是c2w矩阵的R或者说相机外参R的转置
+        self.R = R  # Note that the passed-in R is actually the c2w rotation, i.e. the transpose of the camera extrinsic R.
         self.T = T
         self.FoVx = FoVx
         self.FoVy = FoVy
         self.image_name = image_name
         self.depth_image = depth_image
-        self.diffuse=diffuse    
         self.normal_image=normal_image
         self.mask = mask
         self.bounds = bounds
@@ -46,7 +45,7 @@ class Camera(nn.Module):
             self.data_device = torch.device("cuda")
 
         self.original_image = image.clamp(0.0, 1.0).to(self.data_device)
-        #添加pbr属性评估
+        # Add PBR-related attributes for evaluation.
         self.original_albedo = albedo.clamp(0.0, 1.0).to(self.data_device) if albedo is not None else None
         self.original_roughness = roughness.clamp(0.0, 1.0).to(self.data_device) if roughness is not None else None
         self.original_metallic = metallic.clamp(0.0, 1.0).to(self.data_device) if metallic is not None else None

@@ -26,5 +26,10 @@
         "variant": "cpp",
         "__functional_base": "cpp",
         "type_traits": "cpp"
-    }
+    },
+    "python.testing.pytestArgs": [
+        "hash_encoding"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
 }

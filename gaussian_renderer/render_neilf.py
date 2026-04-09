@@ -3,11 +3,20 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 from arguments import OptimizationParams
-from scene.gaussian_model_r3dg import GaussianModel
+from scene.gaussian_model_sgs import GaussianModel
+
 # from scene.gaussian_model_rgbx import GaussianModel
-from scene.cameras import Camera,PseudoCamera
+from scene.cameras import Camera, PseudoCamera
 from utils.sh_utils import eval_sh
-from utils.loss_utils import ssim, bilateral_smooth_loss, second_order_edge_aware_loss, tv_loss, first_order_edge_aware_loss, first_order_loss, first_order_edge_aware_norm_loss
+from utils.loss_utils import (
+    ssim,
+    bilateral_smooth_loss,
+    second_order_edge_aware_loss,
+    tv_loss,
+    first_order_edge_aware_loss,
+    first_order_loss,
+    first_order_edge_aware_norm_loss,
+)
 from utils.image_utils import psnr
 from utils.graphics_utils import fibonacci_sphere_sampling, rgb_to_srgb, srgb_to_rgb
 from .r3dg_rasterization import GaussianRasterizationSettings, GaussianRasterizer
@@ -16,13 +25,27 @@ from utils.loss_utils import MSGLoss
 
 msgloss = MSGLoss(device="cuda")
 
-def render_view_neilf(viewpoint_camera: Camera, pc: GaussianModel, pipe, bg_color: torch.Tensor,
-                scaling_modifier=1.0, override_color=None, is_training=False, dict_params=None,**kwargs
-                ):
+
+def render_view_neilf(
+    viewpoint_camera: Camera,
+    pc: GaussianModel,
+    pipe,
+    bg_color: torch.Tensor,
+    scaling_modifier=1.0,
+    override_color=None,
+    is_training=False,
+    dict_params=None,
+    **kwargs,
+):
     direct_light_env_light = dict_params.get("env_light")
-    
+
     # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means
-    screenspace_points = torch.zeros_like(pc.get_xyz, dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda") + 0
+    screenspace_points = (
+        torch.zeros_like(
+            pc.get_xyz, dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda"
+        )
+        + 0
+    )
     try:
         screenspace_points.retain_grad()
     except:
@@ -49,7 +72,7 @@ def render_view_neilf(viewpoint_camera: Camera, pc: GaussianModel, pipe, bg_colo
         prefiltered=False,
         backward_geometry=True,
         computer_pseudo_normal=True,
-        debug=pipe.debug
+        debug=pipe.debug,
     )
 
     rasterizer = GaussianRasterizer(raster_settings=raster_settings)
@@ -75,7 +98,7 @@ def render_view_neilf(viewpoint_camera: Camera, pc: GaussianModel, pipe, bg_colo
     colors_precomp = None
     if override_color is None:
         # shs = pc.get_features
-        shs=pc.get_shs
+        shs = pc.get_shs
     else:
         colors_precomp = override_color
 
@@ -83,36 +106,75 @@ def render_view_neilf(viewpoint_camera: Camera, pc: GaussianModel, pipe, bg_colo
     roughness = pc.get_roughness
     normal = pc.get_normal
     incidents = pc.get_incidents  # incident shs
-    viewdirs = F.normalize(viewpoint_camera.camera_center - means3D, dim=-1) #这是世界坐标系下的view_dirs,这样写
-    #是因为它不是逐像素的处理对应元素，而是逐gaussian处理元素，故不需要先构建camera坐标系下的ndc rays再将其转换到世界
-    # 坐标系下
-    
+    viewdirs = F.normalize(
+        viewpoint_camera.camera_center - means3D, dim=-1
+    )  # These are view directions in world coordinates.
+    # This is because the operation is performed per Gaussian rather than per pixel, so there is no need to build NDC rays in camera coordinates and then transform them back to world coordinates.
+    # coordinates.
+
     # print("is_training is True, using precomputed visibility tracing")
     brdf_color, extra_results = rendering_equation(
-        base_color, roughness, normal.detach(), viewdirs, incidents,
-        direct_light_env_light, visibility_precompute=pc._visibility_tracing, 
-        incident_dirs_precompute=pc._incident_dirs, incident_areas_precompute=pc._incident_areas)
+        base_color,
+        roughness,
+        normal.detach(),
+        viewdirs,
+        incidents,
+        direct_light_env_light,
+        visibility_precompute=pc._visibility_tracing,
+        incident_dirs_precompute=pc._incident_dirs,
+        incident_areas_precompute=pc._incident_areas,
+    )
 
     xyz_homo = torch.cat([means3D, torch.ones_like(means3D[:, :1])], dim=-1)
     depths = (xyz_homo @ viewpoint_camera.world_view_transform)[:, 2:3]
     depths2 = depths.square()
-    
+
     if is_training:
-        features = torch.cat([depths, depths2, brdf_color, normal, base_color, roughness, 
-                              extra_results["diffuse_light"], 
-                              extra_results["incident_visibility"].mean(-2)], dim=-1)
+        features = torch.cat(
+            [
+                depths,
+                depths2,
+                brdf_color,
+                normal,
+                base_color,
+                roughness,
+                extra_results["diffuse_light"],
+                extra_results["incident_visibility"].mean(-2),
+            ],
+            dim=-1,
+        )
     else:
-        features = torch.cat([depths, depths2, brdf_color, normal, base_color, roughness,
-                              extra_results["diffuse_light"], 
-                              extra_results["specular"], 
-                              extra_results["incident_lights"].mean(-2),
-                              extra_results["local_incident_lights"].mean(-2),
-                              extra_results["global_incident_lights"].mean(-2),
-                              extra_results["incident_visibility"].mean(-2)], dim=-1)
+        features = torch.cat(
+            [
+                depths,
+                depths2,
+                brdf_color,
+                normal,
+                base_color,
+                roughness,
+                extra_results["diffuse_light"],
+                extra_results["specular"],
+                extra_results["incident_lights"].mean(-2),
+                extra_results["local_incident_lights"].mean(-2),
+                extra_results["global_incident_lights"].mean(-2),
+                extra_results["incident_visibility"].mean(-2),
+            ],
+            dim=-1,
+        )
 
     # Rasterize visible Gaussians to image, obtain their radii (on screen).
-    (num_rendered, num_contrib, rendered_image, rendered_opacity, rendered_depth,
-     rendered_feature, rendered_pseudo_normal, rendered_surface_xyz, weights, radii) = rasterizer(
+    (
+        num_rendered,
+        num_contrib,
+        rendered_image,
+        rendered_opacity,
+        rendered_depth,
+        rendered_feature,
+        rendered_pseudo_normal,
+        rendered_surface_xyz,
+        weights,
+        radii,
+    ) = rasterizer(
         means3D=means3D,
         means2D=means2D,
         shs=shs,
@@ -127,54 +189,80 @@ def render_view_neilf(viewpoint_camera: Camera, pc: GaussianModel, pipe, bg_colo
     mask = num_contrib > 0
     rendered_feature = rendered_feature / rendered_opacity.clamp_min(1e-5) * mask
     feature_dict = {}
-    
+
     if is_training:
-        rendered_depth, rendered_depth2, rendered_pbr, rendered_normal, rendered_base_color, \
-            rendered_roughness, rendered_diffuse, rendered_visibility \
-            = rendered_feature.split([1, 1, 3, 3, 3, 1, 3, 1], dim=0)
-        feature_dict.update({"base_color": rgb_to_srgb(rendered_base_color),
-                             "roughness": rendered_roughness,
-                             "diffuse": rgb_to_srgb(rendered_diffuse),
-                             "visibility": rendered_visibility
-                             })
+        (
+            rendered_depth,
+            rendered_depth2,
+            rendered_pbr,
+            rendered_normal,
+            rendered_base_color,
+            rendered_roughness,
+            rendered_diffuse,
+            rendered_visibility,
+        ) = rendered_feature.split([1, 1, 3, 3, 3, 1, 3, 1], dim=0)
+        feature_dict.update(
+            {
+                "base_color": rgb_to_srgb(rendered_base_color),
+                "roughness": rendered_roughness,
+                "diffuse": rgb_to_srgb(rendered_diffuse),
+                "visibility": rendered_visibility,
+            }
+        )
     else:
-        rendered_depth, rendered_depth2, rendered_pbr, rendered_normal, rendered_base_color, rendered_roughness, \
-            rendered_diffuse, rendered_specular, rendered_light, rendered_local_light, rendered_global_light, rendered_visibility \
-            = rendered_feature.split([1, 1, 3, 3, 3, 1, 3, 3, 3, 3, 3, 1], dim=0)
-        feature_dict.update({
-                             "base_color": rgb_to_srgb(rendered_base_color),
-                             "roughness": rendered_roughness,
-                            #  "diffuse": rgb_to_srgb(rendered_diffuse),
-                             "diffuse":rendered_diffuse,
-                             "specular": rgb_to_srgb(rendered_specular),
-                             "lights": rgb_to_srgb(rendered_light),
-                             "local_lights": rgb_to_srgb(rendered_local_light),
-                             "global_lights": rgb_to_srgb(rendered_global_light),
-                             "visibility": rendered_visibility,
-                             })
-  
+        (
+            rendered_depth,
+            rendered_depth2,
+            rendered_pbr,
+            rendered_normal,
+            rendered_base_color,
+            rendered_roughness,
+            rendered_diffuse,
+            rendered_specular,
+            rendered_light,
+            rendered_local_light,
+            rendered_global_light,
+            rendered_visibility,
+        ) = rendered_feature.split([1, 1, 3, 3, 3, 1, 3, 3, 3, 3, 3, 1], dim=0)
+        feature_dict.update(
+            {
+                "base_color": rgb_to_srgb(rendered_base_color),
+                "roughness": rendered_roughness,
+                #  "diffuse": rgb_to_srgb(rendered_diffuse),
+                "diffuse": rendered_diffuse,
+                "specular": rgb_to_srgb(rendered_specular),
+                "lights": rgb_to_srgb(rendered_light),
+                "local_lights": rgb_to_srgb(rendered_local_light),
+                "global_lights": rgb_to_srgb(rendered_global_light),
+                "visibility": rendered_visibility,
+            }
+        )
+
     rendered_var = rendered_depth2 - rendered_depth.square()
 
     pbr = rendered_pbr
-    rendered_pbr = pbr * rendered_opacity + (1 - rendered_opacity) * bg_color[:, None, None]
+    rendered_pbr = (
+        pbr * rendered_opacity + (1 - rendered_opacity) * bg_color[:, None, None]
+    )
 
     # Those Gaussians that were frustum culled or had a radius of 0 were not visible.
     # They will be excluded from value updates used in the splitting criteria.
-    results = {"render": rendered_image,
-               "depth": rendered_depth,
-               "depth_var": rendered_var,
-               "pbr": rgb_to_srgb(rendered_pbr),
-               "normal": rendered_normal,
-               "pseudo_normal": rendered_pseudo_normal,
-               "surface_xyz": rendered_surface_xyz,
-               "opacity": rendered_opacity,
-               "depth": rendered_depth,
-               "viewspace_points": screenspace_points,
-               "visibility_filter": radii > 0,
-               "radii": radii,
-               "num_rendered": num_rendered,
-               "num_contrib": num_contrib
-               }
+    results = {
+        "render": rendered_image,
+        "depth": rendered_depth,
+        "depth_var": rendered_var,
+        "pbr": rgb_to_srgb(rendered_pbr),
+        "normal": rendered_normal,
+        "pseudo_normal": rendered_pseudo_normal,
+        "surface_xyz": rendered_surface_xyz,
+        "opacity": rendered_opacity,
+        "depth": rendered_depth,
+        "viewspace_points": screenspace_points,
+        "visibility_filter": radii > 0,
+        "radii": radii,
+        "num_rendered": num_rendered,
+        "num_contrib": num_contrib,
+    }
 
     results.update(feature_dict)
     results["diffuse_light"] = extra_results["diffuse_light"]
@@ -183,14 +271,20 @@ def render_view_neilf(viewpoint_camera: Camera, pc: GaussianModel, pipe, bg_colo
         results["env"] = direct_light_env_light.get_env
     except:
         pass
-    
+
     if not is_training:
         directions = viewpoint_camera.get_world_directions()
-        direct_env = direct_light_env_light.direct_light(directions.permute(1, 2, 0)).permute(2, 0, 1)
-        results["render_env"] = rendered_image + (1 - rendered_opacity) * rgb_to_srgb(direct_env)
-        results["pbr_env"] = rgb_to_srgb(pbr * rendered_opacity + (1 - rendered_opacity) * direct_env)
+        direct_env = direct_light_env_light.direct_light(
+            directions.permute(1, 2, 0)
+        ).permute(2, 0, 1)
+        results["render_env"] = rendered_image + (1 - rendered_opacity) * rgb_to_srgb(
+            direct_env
+        )
+        results["pbr_env"] = rgb_to_srgb(
+            pbr * rendered_opacity + (1 - rendered_opacity) * direct_env
+        )
         results["env_only"] = rgb_to_srgb(direct_env)
-        
+
     return results
 
 
@@ -208,9 +302,21 @@ def calculate_loss(viewpoint_camera, pc, results, opt, direct_light_env_light):
     rendered_diffuse = results["diffuse"]
 
     gt_image = viewpoint_camera.original_image.cuda()
-    gt_albedo= viewpoint_camera.original_albedo.cuda() if viewpoint_camera.original_albedo is not None else None
-    gt_roughness = viewpoint_camera.original_roughness.cuda() if viewpoint_camera.original_roughness is not None else None
-    geo_diffuse = viewpoint_camera.diffuse.cuda() if viewpoint_camera.diffuse is not None else None
+    gt_albedo = (
+        viewpoint_camera.original_albedo.cuda()
+        if viewpoint_camera.original_albedo is not None
+        else None
+    )
+    gt_roughness = (
+        viewpoint_camera.original_roughness.cuda()
+        if viewpoint_camera.original_roughness is not None
+        else None
+    )
+    geo_diffuse = (
+        viewpoint_camera.diffuse.cuda()
+        if viewpoint_camera.diffuse is not None
+        else None
+    )
     Ll1 = F.l1_loss(rendered_image, gt_image)
     ssim_val = ssim(rendered_image, gt_image)
     tb_dict["l1"] = Ll1.item()
@@ -224,28 +330,38 @@ def calculate_loss(viewpoint_camera, pc, results, opt, direct_light_env_light):
     tb_dict["l1_pbr"] = Ll1_pbr.item()
     tb_dict["ssim_pbr"] = ssim_val_pbr.item()
     tb_dict["psnr_pbr"] = psnr(rendered_pbr, gt_image).mean().item()
-    loss_pbr = (1.0 - opt.lambda_dssim) * Ll1_pbr + opt.lambda_dssim * (1.0 - ssim_val_pbr)
+    loss_pbr = (1.0 - opt.lambda_dssim) * Ll1_pbr + opt.lambda_dssim * (
+        1.0 - ssim_val_pbr
+    )
     loss = loss + opt.lambda_pbr * loss_pbr
-    #当前方法对albedo的估计可能还是要测试一下是否有必要加入该loss
-    Ll1_albedo=F.l1_loss(rendered_base_color,gt_albedo) 
+    # The current method may still need testing to determine whether the albedo estimate should include this loss.
+    Ll1_albedo = F.l1_loss(rendered_base_color, gt_albedo)
     ssim_val_albedo = ssim(rendered_base_color, gt_albedo)
     tb_dict["ssim_albedo"] = ssim_val_albedo.item()
     tb_dict["l1_albedo"] = Ll1_albedo.item()
-    loss_albedo = (1.0 - opt.lambda_dssim) * Ll1_albedo + opt.lambda_dssim * (1.0 - ssim_val_albedo)
-    loss_albedo+=opt.lambda_msg*msgloss(rendered_base_color.unsqueeze(0),gt_albedo.unsqueeze(0),mask=None)
-    loss+= 0.3*loss_albedo
-    #对roughness做估计
+    loss_albedo = (1.0 - opt.lambda_dssim) * Ll1_albedo + opt.lambda_dssim * (
+        1.0 - ssim_val_albedo
+    )
+    loss_albedo += opt.lambda_msg * msgloss(
+        rendered_base_color.unsqueeze(0), gt_albedo.unsqueeze(0), mask=None
+    )
+    loss += 0.3 * loss_albedo
+    # Estimate roughness.
     if rendered_roughness is not None and gt_roughness is not None:
         Ll1_roughness = F.l1_loss(rendered_roughness, gt_roughness)
         ssim_val_roughness = ssim(rendered_roughness, gt_roughness)
         tb_dict["ssim_roughness"] = ssim_val_roughness.item()
         tb_dict["l1_roughness"] = Ll1_roughness.item()
-        loss_roughness = (1.0 - opt.lambda_dssim) * Ll1_roughness + opt.lambda_dssim * (1.0 - ssim_val_roughness)
-        loss_roughness+=opt.lambda_msg*msgloss(rendered_roughness.unsqueeze(0),gt_roughness.unsqueeze(0),mask=None)
-        loss+= 0.3 * loss_roughness
-    
+        loss_roughness = (1.0 - opt.lambda_dssim) * Ll1_roughness + opt.lambda_dssim * (
+            1.0 - ssim_val_roughness
+        )
+        loss_roughness += opt.lambda_msg * msgloss(
+            rendered_roughness.unsqueeze(0), gt_roughness.unsqueeze(0), mask=None
+        )
+        loss += 0.3 * loss_roughness
+
     # loss+= 0.3*loss_albedo
-    
+
     if opt.lambda_light > 0:
         diffuse_light = results["diffuse_light"]
         mean_light = diffuse_light.mean(-1, keepdim=True).expand_as(diffuse_light)
@@ -255,75 +371,118 @@ def calculate_loss(viewpoint_camera, pc, results, opt, direct_light_env_light):
 
     if opt.lambda_base_color_smooth > 0:
         # image_mask = viewpoint_camera.image_mask.cuda()
-        loss_base_color_smooth = first_order_edge_aware_loss(rendered_base_color , gt_image)
+        loss_base_color_smooth = first_order_edge_aware_loss(
+            rendered_base_color, gt_image
+        )
         # loss_base_color_smooth = second_order_edge_aware_loss(rendered_base_color * image_mask, gt_image)
         tb_dict["loss_base_color_smooth"] = loss_base_color_smooth.item()
         loss = loss + opt.lambda_base_color_smooth * loss_base_color_smooth
 
     if opt.lambda_roughness_smooth > 0:
-        loss_roughness_smooth = first_order_edge_aware_loss(rendered_roughness , gt_image)
+        loss_roughness_smooth = first_order_edge_aware_loss(
+            rendered_roughness, gt_image
+        )
         # loss_roughness_smooth = second_order_edge_aware_loss(rendered_roughness * image_mask, gt_image)
         tb_dict["loss_roughness_smooth"] = loss_roughness_smooth.item()
         loss = loss + opt.lambda_roughness_smooth * loss_roughness_smooth
-    
-    
+
     if opt.lambda_light_smooth > 0:
-        loss_light_smooth = first_order_edge_aware_loss(rendered_diffuse , rendered_normal)
+        loss_light_smooth = first_order_edge_aware_loss(
+            rendered_diffuse, rendered_normal
+        )
         # loss_light_smooth = second_order_edge_aware_loss(rendered_diffuse * image_mask, gt_image)
         tb_dict["loss_light_smooth"] = loss_light_smooth.item()
         loss = loss + opt.lambda_light_smooth * loss_light_smooth
-        
+
     if opt.lambda_env_smooth > 0:
         env = direct_light_env_light.get_env
         loss_env_smooth = tv_loss(env[0].permute(2, 0, 1))
         tb_dict["loss_env_smooth"] = loss_env_smooth.item()
         loss = loss + opt.lambda_env_smooth * loss_env_smooth
-    
+
     if opt.lambda_normal_smooth > 0:
         # loss_normal_smooth = second_order_edge_aware_loss(rendered_normal * image_mask, gt_image)
-        loss_normal_smooth = tv_loss(rendered_normal )
+        loss_normal_smooth = tv_loss(rendered_normal)
         tb_dict["loss_normal_smooth"] = loss_normal_smooth.item()
         loss = loss + opt.lambda_normal_smooth * loss_normal_smooth
 
-    if opt.lambda_geo_diffuse>0:
-        Ll1_diffuse=F.l1_loss(rendered_diffuse,geo_diffuse)
+    if opt.lambda_geo_diffuse > 0:
+        Ll1_diffuse = F.l1_loss(rendered_diffuse, geo_diffuse)
         ssim_val_diffuse = ssim(rendered_diffuse, geo_diffuse)
-        loss_diffuse = (1.0 - opt.lambda_dssim) * Ll1_diffuse + opt.lambda_dssim * (1.0 - ssim_val_diffuse)
-        loss_diffuse+=opt.lambda_msg*msgloss(rendered_diffuse.unsqueeze(0),geo_diffuse.unsqueeze(0),mask=None)
-        loss+= opt.lambda_geo_diffuse*loss_diffuse
+        loss_diffuse = (1.0 - opt.lambda_dssim) * Ll1_diffuse + opt.lambda_dssim * (
+            1.0 - ssim_val_diffuse
+        )
+        loss_diffuse += opt.lambda_msg * msgloss(
+            rendered_diffuse.unsqueeze(0), geo_diffuse.unsqueeze(0), mask=None
+        )
+        loss += opt.lambda_geo_diffuse * loss_diffuse
 
     tb_dict["loss"] = loss.item()
 
     return loss, tb_dict
 
 
-def render_neilf(viewpoint_camera: Camera, pc: GaussianModel, pipe, bg_color: torch.Tensor,
-                 scaling_modifier=1.0, override_color=None, opt: OptimizationParams = False,
-                 is_training=False, dict_params=None, **kwargs):
+def render_neilf(
+    viewpoint_camera: Camera,
+    pc: GaussianModel,
+    pipe,
+    bg_color: torch.Tensor,
+    scaling_modifier=1.0,
+    override_color=None,
+    opt: OptimizationParams = False,
+    is_training=False,
+    dict_params=None,
+    **kwargs,
+):
     """
     Render the scene.
     Background tensor (bg_color) must be on GPU!
     """
-    results = render_view_neilf(viewpoint_camera, pc, pipe, bg_color,
-                          scaling_modifier, override_color, is_training, dict_params,**kwargs)
+    results = render_view_neilf(
+        viewpoint_camera,
+        pc,
+        pipe,
+        bg_color,
+        scaling_modifier,
+        override_color,
+        is_training,
+        dict_params,
+        **kwargs,
+    )
 
     if is_training:
-        loss, tb_dict = calculate_loss(viewpoint_camera, pc, results, opt, direct_light_env_light=dict_params['env_light'])
+        loss, tb_dict = calculate_loss(
+            viewpoint_camera,
+            pc,
+            results,
+            opt,
+            direct_light_env_light=dict_params["env_light"],
+        )
         results["tb_dict"] = tb_dict
         results["loss"] = loss
 
     return results
 
 
-def rendering_equation(base_color, roughness, normals, viewdirs,
-                              incidents, direct_light_env_light=None,
-                              visibility_precompute=None, incident_dirs_precompute=None, incident_areas_precompute=None):
+def rendering_equation(
+    base_color,
+    roughness,
+    normals,
+    viewdirs,
+    incidents,
+    direct_light_env_light=None,
+    visibility_precompute=None,
+    incident_dirs_precompute=None,
+    incident_areas_precompute=None,
+):
     incident_dirs, incident_areas = incident_dirs_precompute, incident_areas_precompute
 
     deg = int(np.sqrt(incidents.shape[1]) - 1)
     global_incident_lights = direct_light_env_light.direct_light(incident_dirs)
-    local_incident_lights = eval_sh(deg, incidents.transpose(1, 2).view(-1, 1, 3, (deg + 1) ** 2), incident_dirs).clamp_min(0)
-    
+    local_incident_lights = eval_sh(
+        deg, incidents.transpose(1, 2).view(-1, 1, 3, (deg + 1) ** 2), incident_dirs
+    ).clamp_min(0)
+
     incident_visibility = visibility_precompute
     global_incident_lights = global_incident_lights * incident_visibility
     incident_lights = local_incident_lights + global_incident_lights
@@ -335,7 +494,9 @@ def rendering_equation(base_color, roughness, normals, viewdirs,
     transport = incident_lights * incident_areas * n_d_i  # （num_pts, num_sample, 3)
     specular = ((f_s) * transport).mean(dim=-2)
     pbr = ((f_d + f_s) * transport).mean(dim=-2)
-    diffuse_light = transport.mean(dim=-2)/np.pi  #这里是试图将I分解为albedo*diffuse_light的形式
+    diffuse_light = (
+        transport.mean(dim=-2) / np.pi
+    )  # This attempts to decompose I into albedo * diffuse_light.
     # diffuse_light = transport.mean(dim=-2)
 
     extra_results = {
@@ -351,13 +512,7 @@ def rendering_equation(base_color, roughness, normals, viewdirs,
     return pbr, extra_results
 
 
-def GGX_specular(
-        normal,
-        pts2c,
-        pts2l,
-        roughness,
-        fresnel
-):
+def GGX_specular(normal, pts2c, pts2l, roughness, fresnel):
     L = F.normalize(pts2l, dim=-1)  # [nrays, nlights, 3]
     V = F.normalize(pts2c, dim=-1)  # [nrays, 3]
     H = F.normalize((L + V[:, None, :]) / 2.0, dim=-1)  # [nrays, nlights, 3]
@@ -366,17 +521,23 @@ def GGX_specular(
     NoV = torch.sum(V * N, dim=-1, keepdim=True)  # [nrays, 1]
     N = N * NoV.sign()  # [nrays, 3]
 
-    NoL = torch.sum(N[:, None, :] * L, dim=-1, keepdim=True).clamp_(1e-6, 1)  # [nrays, nlights, 1] TODO check broadcast
+    NoL = torch.sum(N[:, None, :] * L, dim=-1, keepdim=True).clamp_(
+        1e-6, 1
+    )  # [nrays, nlights, 1] TODO check broadcast
     NoV = torch.sum(N * V, dim=-1, keepdim=True).clamp_(1e-6, 1)  # [nrays, 1]
-    NoH = torch.sum(N[:, None, :] * H, dim=-1, keepdim=True).clamp_(1e-6, 1)  # [nrays, nlights, 1]
-    VoH = torch.sum(V[:, None, :] * H, dim=-1, keepdim=True).clamp_(1e-6, 1)  # [nrays, nlights, 1]
+    NoH = torch.sum(N[:, None, :] * H, dim=-1, keepdim=True).clamp_(
+        1e-6, 1
+    )  # [nrays, nlights, 1]
+    VoH = torch.sum(V[:, None, :] * H, dim=-1, keepdim=True).clamp_(
+        1e-6, 1
+    )  # [nrays, nlights, 1]
 
     alpha = roughness * roughness  # [nrays, 3]
     alpha2 = alpha * alpha  # [nrays, 3]
     k = (alpha + 2 * roughness + 1.0) / 8.0
     FMi = ((-5.55473) * VoH - 6.98316) * VoH
     frac0 = fresnel + (1 - fresnel) * torch.pow(2.0, FMi)  # [nrays, nlights, 3]
-    
+
     frac = frac0 * alpha2[:, None, :]  # [nrays, 1]
     nom0 = NoH * NoH * (alpha2[:, None, :] - 1) + 1
 

@@ -6,7 +6,9 @@ output/
 outputs/
 datasets/
 debug_images/
-pretrained_models/
+pretrained_models/*
+!pretrained_models/.gitkeep
+!pretrained_models/.gitignore
 submodules/
 colmap/
 diffusers/
@@ -24,4 +26,5 @@ NVIDIA-OptiX-SDK-9.0.0-linux64-x86_64/
 nvdiffrast/
 namespace_demo/
 bvh/
-
+indoor_real/
+indoor_synthetic/

@@ -28,7 +28,7 @@ def poses_avg(poses):
 
 def focus_point_fn(poses):
     """Calculate nearest point to all focal axes in poses."""
-    #该函数实现的是一个线性代数问题，即求一个点使得其到所有直线的距离都最小
+    # This function solves a linear-algebra problem: find the point that minimizes the distance to all lines.
     directions, origins = poses[:, :3, 2:3], poses[:, :3, 3:4]
     m = np.eye(3) - directions * np.transpose(directions, [0, 2, 1])
     mt_m = np.transpose(m, [0, 2, 1]) @ m
@@ -38,7 +38,7 @@ def focus_point_fn(poses):
 def recenter_poses(poses: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
   """Recenter poses around the origin."""
   cam2world = poses_avg(poses)
-  transform = np.linalg.inv(pad_poses(cam2world))  #这里transform表示的是w2c矩阵
+    transform = np.linalg.inv(pad_poses(cam2world))  # transform here represents the world-to-camera matrix.
   poses = transform @ pad_poses(poses)
   return unpad_poses(poses), transform
 

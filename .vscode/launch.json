@@ -186,10 +186,10 @@
             "python": "/home/jiahao/anaconda3/envs/dragGaussian/bin/python"
         },
         {
-            "name": "Python: Train train_r3dg.py interiorverse scene_0 nviews_12",
+            "name": "Python: Train train.py interiorverse scene_0 nviews_12",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/compare_methods/train_r3dg.py",
+            "program": "${workspaceFolder}/train.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
@@ -216,7 +216,7 @@
             "name": "Python: Train NeILF model using 3DGS checkpoint (scene_0_bp, n_views=12, v5)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/compare_methods/train_r3dg.py",
+            "program": "${workspaceFolder}/train.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
@@ -247,6 +247,70 @@
             ],
             "env": {
             "CUDA_VISIBLE_DEVICES": "4"
+            },
+            "python": "/home/jiahao/anaconda3/envs/dragGaussian/bin/python"
+        },
+        {
+            "name": "Python: Train NeILF gsid scene_11 nviews_12 v2 vis_enc_self",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/train.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+            "--eval",
+            "-s", "./datasets/interiorverse_vggt/scene_11/",
+            "-m", "./outputs/interiorverse_vggt/scene_11_neilf_nv12_gsid_v2_vis_enc_self",
+            "-c", "./outputs/interiorverse_vggt/scene_11_3dgs_nv12_v0/chkpnt7000.pth",
+            "--save_training_vis",
+            "--position_lr_init", "0",
+            "--position_lr_final", "0",
+            "--normal_lr", "0",
+            "--sh_lr", "0",
+            "--opacity_lr", "0",
+            "--scaling_lr", "0",
+            "--rotation_lr", "0",
+            "--pointlight_lr", "0.05",
+            "--gsid_env_lr", "0.01",
+            "--iterations", "10000",
+            "--env_resolution", "128",
+            "--lambda_base_color_smooth", "1",
+            "--lambda_roughness_smooth", "0.2",
+            "--lambda_geo_diffuse", "0.25",
+            "--lambda_light_smooth", "1",
+            "--lambda_light", "0.01",
+            "--lambda_pbr", "1.0",
+            "--lambda_env_smooth", "0.01",
+            "-t", "gsid",
+            "--sample_num", "24",
+            "--save_training_vis_iteration", "200",
+            "--n_views", "12"
+            ],
+            "env": {
+            "CUDA_VISIBLE_DEVICES": "3",
+            "http_proxy": "http://127.0.0.1:7890",
+            "https_proxy": "http://127.0.0.1:7890"
+            },
+            "python": "/home/jiahao/anaconda3/envs/dragGaussian/bin/python"
+        },
+        {
+            "name": "Python: Eval NeILF scene_11 nviews_12 (gsid)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/eval_nvs.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+            "--eval",
+            "-m", "./outputs/interiorverse_vggt/scene_11_neilf_nv12_gsid_v0_morelight",
+            "-c", "./outputs/interiorverse_vggt/scene_11_neilf_nv12_gsid_v0_morelight/chkpnt10000.pth",
+            "-t", "gsid",
+            "--n_views", "12"
+            ],
+            "env": {
+            "CUDA_VISIBLE_DEVICES": "6",
+            "http_proxy": "http://127.0.0.1:7890",
+            "https_proxy": "http://127.0.0.1:7890"
             },
             "python": "/home/jiahao/anaconda3/envs/dragGaussian/bin/python"
         },

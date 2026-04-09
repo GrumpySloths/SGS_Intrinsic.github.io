@@ -109,7 +109,7 @@ class CNN_decoder(nn.Module):
         super().__init__()
         #self.input_dim = input_dim
         #self.output_dim = output_dim
-        #本质上学习了一个通用的上采样模式，这个模式是针对图片而言的
+        # In essence, this learns a generic upsampling pattern for images.
         self.conv = nn.Conv2d(input_dim, output_dim, kernel_size=1).cuda()
 
 

@@ -88,7 +88,7 @@ class IIR_SSRT_RenderLayer(nn.Module):
         ########## Incident Sampling Start ##########
         #############################################
 
-        cx, cy, cz = create_frame(normal) #这是基于法线为z轴构建了一个正交坐标系
+        cx, cy, cz = create_frame(normal)  # This constructs an orthogonal frame using the normal as the z-axis.
         fx, fy, fz = torch.split(torch.cat([cx, cy, cz], dim=0).permute(1,0,2,3), 1, dim=0)
 
         # ============ W_i - Direction to the camera =================
@@ -124,9 +124,9 @@ class IIR_SSRT_RenderLayer(nn.Module):
         icol = wi.size(4)
 
         # ============ W_o - Direction to the light =================
-        #这里已经采样好了所有的光线方向
+        # All light directions have already been sampled here.
         wo_emitter = lighting_model.sample_direction(vpos=vpos.unsqueeze(1), normal=normal.unsqueeze(1)) #[1,49,3,240,320]
-        wo = (wo_emitter[:, :, 0:1, ...] * fx.unsqueeze(1) + #这里本质上是将wo,wi,normal都转化到同一坐标系下进行计算
+        wo = (wo_emitter[:, :, 0:1, ...] * fx.unsqueeze(1) +  # In essence, this transforms wo, wi, and normal into the same coordinate system for computation.
               wo_emitter[:, :, 1:2, ...] * fy.unsqueeze(1) +
               wo_emitter[:, :, 2:3, ...] * fz.unsqueeze(1))
         if self.double_sided:
@@ -229,12 +229,12 @@ class IIR_SSRT_RenderLayer(nn.Module):
                 'uncertainty': uncertainty, 'normal': normals,
                 'Kd': Kd, 'Ks': Ks, 'rough': roughs
             }
-        #这里是去计算采样方向实际得到的sgm 的具体值
+        # Compute the actual SG values for the sampled directions here.
         light = lighting_model(direction=direction) #[49,76800,3] 49是采样数，76800是240*320
 
         pdf_emitter = lighting_model.pdf_direction(vpos=vpos.unsqueeze(1), direction=wo_emitter)
         pdf_emitter = torch.clamp(pdf_emitter, min=0.001)
-        ndl = torch.clamp(wo[:, :, 2:, ...], min=0)  #这个ndl某种程度上可以看作以法线作为小面元朝向实际所接收到的光强，即cosine term
+        ndl = torch.clamp(wo[:, :, 2:, ...], min=0)  # ndl can be viewed as the received light intensity aligned with the surface normal, i.e. the cosine term.
 
         # light = get_light_chunk(model, im, model_kwargs, direction.size(0), self.chunk)
         light = light.view(1, lighting_model.spp, irow, icol, 3)

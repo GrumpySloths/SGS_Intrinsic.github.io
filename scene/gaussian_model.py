@@ -503,7 +503,8 @@ class GaussianModel:
         self.confidence = torch.cat([self.confidence, torch.ones(new_opacities.shape, device="cuda")], 0)
         self.normal_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
 
-    #这里应该是FSGS论文对于gaussian unpooling的全部算法实现，应该是不会对cuda进行任何改动的，且看代码它也只是在前2000次迭代中使用
+    # This appears to be the full Gaussian unpooling implementation from the FSGS paper.
+    # It should not make any CUDA changes, and the code shows it is only used in the first 2000 iterations.
     def proximity(self, scene_extent, N = 3):
         dist, nearest_indices = distCUDA2(self.get_xyz)
         selected_pts_mask = torch.logical_and(dist > (5. * scene_extent),
