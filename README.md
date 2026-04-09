@@ -19,38 +19,80 @@ Our method achieves high-quality scene-level disentanglement of illumination and
 
 <!-- Our method's overall workflow. Dotted arrows and dashed arrows describe the pipeline for modeling camera motion blur and modeling defocus blur, respectively at training time. Solid arrows show the process of rendering sharp images at the inference time. Please refer to the paper for more details. -->
 
-## Todo
-<!-- - [ ] ~~Release Paper, Example Code~~ -->
-- [x] ~~Release Paper~~ 
-- [ ] Release Code (Coming soon)
-- [ ] Clean Code
+## 🚀 Getting Started
 
-<!-- ## Setup
-###  1. Installation
-```
-git clone https://github.com/hhhddddddd/dydeblur.git --recursive 
-cd dydeblur
+### 📦 Installation
 
-conda create -n dydeblur python=3.10
-conda activate dydeblur
+```bash
+git clone https://github.com/GrumpySloths/SGS_Intrinsic.github.io.git
+cd SGS_Intrinsic.github.io
 
-# install pytorch
-conda install pytorch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 pytorch-cuda=12.4 -c pytorch -c nvidia -y
+# Create and activate your conda environment (example)
+conda create -n sgs_intrinsic python=3.10 -y
+conda activate sgs_intrinsic
 
-# install dependencies
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Training
-```
-python train.py -s <dataset> -m <output> -o <expname> -c 0.01 --eval --iterations 40000
+### 📁 Paths
+
+Prepare your dataset and output paths first:
+
+- Dataset root (default in scripts): `datasets/`
+- Output root (default in scripts): `outputs/`
+- Main training entry: `train.py`
+- Main evaluation entry: `eval_nvs.py`
+
+If you use shell scripts in `scrips/`, please replace path placeholders (e.g., `DATA_ROOT_DIR`, `OUTPUT_DIR`) with your local absolute paths before running.
+
+### 🔖 Checkpoints
+
+Put checkpoints under your configured experiment output path (e.g., `outputs/<dataset>/<scene>_.../`).
+
+Note: `pretrained_models/` is kept as an empty placeholder directory in this repo.
+
+## 🧪 Evaluation
+
+Set your checkpoint-related arguments (e.g., `-m` and `-c`) to your own paths, then run:
+
+```bash
+sh scrips/run_eval_r3dg.sh
 ```
 
-### 3. Evaluation
+For single-scene evaluation, run:
+
+```bash
+python eval_nvs.py --eval \
+  -m <model_output_dir> \
+  -c <checkpoint_path> \
+  -t sgs \
+  --n_views <N>
 ```
-python render.py -m <output> -o <expname> -c 0.01 -t <time> --mode render 
+
+## 📚 Citation
+
+If you find this work useful, please cite:
+
+```bibtex
+@misc{niu2026sgsintrinsicsemanticinvariantgaussiansplatting,
+      title={SGS-Intrinsic: Semantic-Invariant Gaussian Splatting for Sparse-View Indoor Inverse Rendering}, 
+      author={Jiahao Niu and Rongjia Zheng and Wenju Xu and Wei-Shi Zheng and Qing Zhang},
+      year={2026},
+      eprint={2603.27516},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2603.27516}, 
+}
 ```
-<!-- ![](https://komarev.com/ghpvc/?username=hhhddddddd&color=green) -->
 
+BibTeX link: [arXiv BibTeX](https://arxiv.org/bibtex/2603.27516)
 
+## 🙏 Acknowledgement
 
+SGS-Intrinsic builds on open-source efforts of:
+
+- [GS-IR](https://github.com/lzhnb/gs-ir)
+- [R3DG (Relightable 3D Gaussian)](https://github.com/NJU-3DV/Relightable3DGaussian)
+
+We sincerely thank the authors of these projects for their open-source contributions.
